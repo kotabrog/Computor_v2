@@ -1,5 +1,10 @@
 use std::io::{self, Write};
 
+mod lexer;
+
+use lexer::Lexer;
+
+
 fn interpreter() {
     loop {
         print!("> ");
@@ -15,7 +20,16 @@ fn interpreter() {
             break;
         }
 
-        print!("  {}", code);
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}", e);
+                continue;
+            }
+        };
+        println!("{:?}", vec);
+        // 改行は入ってこない場合もある（^Dを2回）
     }
 }
 
