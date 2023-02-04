@@ -1,6 +1,8 @@
 use std::io::{self, Write};
 
 mod lexer;
+mod binary_tree;
+mod parser;
 
 use lexer::Lexer;
 
