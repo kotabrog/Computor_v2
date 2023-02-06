@@ -3,6 +3,7 @@ use std::io::{self, Write};
 mod lexer;
 mod binary_tree;
 mod parser;
+mod num;
 
 use lexer::Lexer;
 
