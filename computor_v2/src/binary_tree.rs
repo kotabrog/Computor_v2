@@ -7,7 +7,7 @@ pub enum BinaryTree<T> {
 
 #[derive(Debug, PartialEq)]
 pub struct TreeNode<T> {
-    element: T,
+    pub element: T,
     left: BinaryTree<T>,
     right: BinaryTree<T>,
 }
@@ -30,40 +30,69 @@ impl<T> BinaryTree<T> {
         })
     }
 
-    pub fn left(&mut self) -> Option<&mut BinaryTree<T>> {
+    pub fn is_non_empty(&self) -> bool {
+        match self {
+            BinaryTree::Empty => false,
+            _ => true,
+        }
+    }
+
+    pub fn left(&self) -> Option<&BinaryTree<T>> {
+        match self {
+            BinaryTree::Empty => None,
+            BinaryTree::NonEmpty(b) => Some(&b.left)
+        }
+    }
+
+    pub fn left_mut(&mut self) -> Option<&mut BinaryTree<T>> {
         match self {
             BinaryTree::Empty => None,
             BinaryTree::NonEmpty(b) => Some(&mut b.left)
         }
     }
 
-    pub fn right(&mut self) -> Option<&mut BinaryTree<T>> {
+    pub fn right(&self) -> Option<&BinaryTree<T>> {
+        match self {
+            BinaryTree::Empty => None,
+            BinaryTree::NonEmpty(b) => Some(&b.right)
+        }
+    }
+
+    pub fn right_mut(&mut self) -> Option<&mut BinaryTree<T>> {
         match self {
             BinaryTree::Empty => None,
             BinaryTree::NonEmpty(b) => Some(&mut b.right)
         }
     }
 
-    pub fn add_left_node_from_node(&mut self, node: TreeNode<T>) -> BinaryTree<T> {
+    pub fn add_left_node_from_tree(&mut self, tree: Self) -> BinaryTree<T> {
         let node_box = match self {
             Self::Empty => {
-                *self = Self::from_node(node);
+                *self = tree;
                 return Self::Empty
             },
             Self::NonEmpty(b) => b,
         };
-        std::mem::replace(&mut node_box.left, Self::from_node(node))
+        std::mem::replace(&mut node_box.left, tree)
+    }
+
+    pub fn add_right_node_from_tree(&mut self, tree: Self) -> BinaryTree<T> {
+        let node_box = match self {
+            Self::Empty => {
+                *self = tree;
+                return Self::Empty
+            },
+            Self::NonEmpty(b) => b,
+        };
+        std::mem::replace(&mut node_box.right, tree)
+    }
+
+    pub fn add_left_node_from_node(&mut self, node: TreeNode<T>) -> BinaryTree<T> {
+        self.add_left_node_from_tree(Self::from_node(node))
     }
 
     pub fn add_right_node_from_node(&mut self, node: TreeNode<T>) -> BinaryTree<T> {
-        let node_box = match self {
-            Self::Empty => {
-                *self = Self::from_node(node);
-                return Self::Empty
-            },
-            Self::NonEmpty(b) => b,
-        };
-        std::mem::replace(&mut node_box.right, Self::from_node(node))
+        self.add_right_node_from_tree(Self::from_node(node))
     }
 
     pub fn add_left_node_from_element(&mut self, element: T) -> BinaryTree<T> {
@@ -111,15 +140,23 @@ mod tests {
     }
 
     #[test]
-    fn left_normal() {
+    fn is_non_empty_normal() {
+        let tree: BinaryTree<i32> = BinaryTree::new();
+        assert!(!tree.is_non_empty());
+        let tree = BinaryTree::from_element(1);
+        assert!(tree.is_non_empty());
+    }
+
+    #[test]
+    fn left_mut_normal() {
         let mut tree = BinaryTree::new();
-        let tmp = tree.left();
+        let tmp = tree.left_mut();
         assert_eq!(tmp, None);
         tree = BinaryTree::from_element("1".to_string());
-        let tmp = tree.left();
+        let tmp = tree.left_mut();
         assert_eq!(tmp, Some(&mut BinaryTree::Empty));
         tree.add_left_node_from_element("2".to_string());
-        let tmp = tree.left();
+        let tmp = tree.left_mut();
         assert_eq!(tmp, Some(&mut BinaryTree::from_element("2".to_string())));
         match tmp {
             Some(tree) => {
@@ -127,9 +164,9 @@ mod tests {
             },
             _ => {}
         }
-        let tmp = match tree.left() {
+        let tmp = match tree.left_mut() {
             Some(tree) => {
-                tree.left()
+                tree.left_mut()
             },
             None => None
         };
@@ -139,13 +176,13 @@ mod tests {
     #[test]
     fn right_normal() {
         let mut tree = BinaryTree::new();
-        let tmp = tree.right();
+        let tmp = tree.right_mut();
         assert_eq!(tmp, None);
         tree = BinaryTree::from_element("1".to_string());
-        let tmp = tree.right();
+        let tmp = tree.right_mut();
         assert_eq!(tmp, Some(&mut BinaryTree::Empty));
         tree.add_right_node_from_element("2".to_string());
-        let tmp = tree.right();
+        let tmp = tree.right_mut();
         assert_eq!(tmp, Some(&mut BinaryTree::from_element("2".to_string())));
         match tmp {
             Some(tree) => {
@@ -153,9 +190,9 @@ mod tests {
             },
             _ => {}
         }
-        let tmp = match tree.right() {
+        let tmp = match tree.right_mut() {
             Some(tree) => {
-                tree.right()
+                tree.right_mut()
             },
             None => None
         };
