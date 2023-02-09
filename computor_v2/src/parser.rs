@@ -55,90 +55,111 @@ impl Parser {
     pub fn make_tree(&mut self) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
         while self.index < self.tokens.len() {
-            match self.while_next_token(&mut tree)? {
-                None => {},
-                Some(element) => {
-                    match element {
-                        Element::Operator(next_op) => {
-                            // self.add_operator(&mut tree, next_op)?
-                            // let tmp_tree
-                            //     = std::mem::replace(&mut tree,
-                            //         BinaryTree::from_element(Element::Operator(next_op)));
-                            // tree.add_left_node_from_tree(tmp_tree);
-                        },
-                        _ => return Err(format!("syntax error")),
-                    }
-                }
-            }
+            self.search_add_point(&mut tree)?;
         }
         Ok(tree)
     }
 
-    fn while_next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<Option<Element>, String> {
-        while self.index < self.tokens.len() {
-            match self.next_token(tree)? {
-                None => {},
-                Some(element) => {
-                    match element {
-                        Element::Operator(next_op) => {
-                            match tree {
-                                BinaryTree::Empty => return Err(format!("syntax error")),
-                                BinaryTree::NonEmpty(node) => {
-                                    match node.element {
-                                        Element::Operator(op) => {
-                                            if next_op.priority(&op) {
-                                                return Ok(Some(element))
-                                            } else {
-                                                let tmp_tree
-                                                    = std::mem::replace(tree,
-                                                        BinaryTree::from_element(Element::Operator(next_op)));
-                                                tree.add_left_node_from_tree(tmp_tree);
-                                                continue;
-                                            }
-                                        },
-                                        _ => return Err(format!("syntax error")),
-                                    }
-                                }
-                            }
-                        },
-                        _ => return Err(format!("syntax error"))
-                    }
+    fn search_add_point(&mut self, tree: &mut BinaryTree<Element>) -> Result<(), String> {
+        match tree {
+            BinaryTree::Empty => {
+                self.while_next_token(tree)?;
+            },
+            BinaryTree::NonEmpty(_) => {
+                let token = self.get_next_token()?;
+                match token {
+                    Token::Plus | Token::Minus | Token::Asterisk | 
+                        Token::Slash | Token::Percent | Token::Caret | Token::TwoAsterisk => {
+                        let operator = Self::token_to_operator(token)?;
+                        let tree_op = Self::get_tree_element_operator(tree)?;
+                        if tree_op.priority(&operator) {
+                            self.search_add_point(tree.right_mut().unwrap())?;
+                        } else {
+                            Self::replace_and_add_left(tree, operator);
+                            self.index_plus();
+                            self.while_next_token(tree)?;
+                        }
+                    },
+                    _ => return Err(format!("syntax error")),
                 }
-            };
+            }
         }
-        Ok(None)
+        Ok(())
+    }
+
+    fn token_to_operator(token: &Token) -> Result<Operator, String> {
+        match token {
+            Token::Plus => Ok(Operator::Plus),
+            Token::Minus => Ok(Operator::Minus),
+            Token::Asterisk => Ok(Operator::Mul),
+            Token::Slash => Ok(Operator::Div),
+            Token::Percent => Ok(Operator::Rem),
+            Token::Caret => Ok(Operator::Pow),
+            Token::TwoAsterisk => Ok(Operator::Pow),
+            _ => Err(format!("syntax error")),
+        }
+    }
+
+    fn get_tree_element_operator(tree: &BinaryTree<Element>) -> Result<&Operator, String> {
+        match tree {
+            BinaryTree::Empty => Err(format!("syntax error")),
+            BinaryTree::NonEmpty(node_box) => {
+                match &node_box.element {
+                    Element::Operator(op) => Ok(op),
+                    _ => Err(format!("syntax error")),
+                }
+            }
+        }
     }
 
     fn get_next_token(&mut self) -> Result<&Token, String> {
         match self.tokens.get(self.index) {
             Some(v) => {
-                self.index += 1;
                 Ok(v)
             },
             None => Err(format!("syntax error")),
         }
     }
 
-    fn next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<Option<Element>, String> {
-        let token = self.get_next_token()?;
-        let next_element = match token {
-            Token::NumString(s) => {
-                let num = Num::from_string_to_float(s)?;
-                num.checked_value()?;
-                self.add_num(tree, num)?
-            },
-            Token::Plus => self.add_operator(tree, Operator::Plus)?,
-            Token::Minus => self.add_operator(tree, Operator::Minus)?,
-            Token::Asterisk => self.add_operator(tree, Operator::Mul)?,
-            Token::Slash => self.add_operator(tree, Operator::Div)?,
-            Token::Percent => self.add_operator(tree, Operator::Rem)?,
-            Token::Caret => self.add_operator(tree, Operator::Pow)?,
-            _ => return Err(format!("{:?}: wip", token))
-        };
-        Ok(next_element)
+    fn index_plus(&mut self) {
+        self.index += 1;
     }
 
-    fn add_num(&mut self, tree: &mut BinaryTree<Element>, num: Num) -> Result<Option<Element>, String> {
+    fn while_next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        while self.index < self.tokens.len() {
+            if self.next_token(tree)? {
+                return Ok(true)
+            }
+        }
+        Ok(false)
+    }
+
+    fn next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        let token = self.get_next_token()?;
+        match token {
+            Token::NumString(s) => {
+                let num = Self::string_to_num(s)?;
+                self.add_num(tree, num)?;
+                self.index_plus();
+            },
+            Token::Plus => return self.add_operator(tree, Operator::Plus),
+            Token::Minus => return self.add_operator(tree, Operator::Minus),
+            Token::Asterisk => return self.add_operator(tree, Operator::Mul),
+            Token::Slash => return self.add_operator(tree, Operator::Div),
+            Token::Percent => return self.add_operator(tree, Operator::Rem),
+            Token::Caret => return self.add_operator(tree, Operator::Pow),
+            _ => return Err(format!("{:?}: wip", token))
+        }
+        Ok(false)
+    }
+
+    fn string_to_num(string: &String) -> Result<Num, String> {
+        let num = Num::from_string_to_float(string)?;
+        num.checked_value()?;
+        Ok(num)
+    }
+
+    fn add_num(&mut self, tree: &mut BinaryTree<Element>, num: Num) -> Result<(), String> {
         let next_tree = match tree.left_mut() {
             None => tree,
             Some(l) => {
@@ -155,46 +176,39 @@ impl Parser {
             },
         };
         *next_tree = BinaryTree::from_element(Element::Num(num));
-        Ok(None)
+        Ok(())
     }
 
-    fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator) -> Result<Option<Element>, String> {
+    fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator) -> Result<bool, String> {
         match tree {
             BinaryTree::Empty => {
-                // *tree = BinaryTree::from_element(Element::Operator(operator));
                 // wip: 単項演算子
                 return Err(format!("{:?}: syntax error", operator))
-            },
-            BinaryTree::NonEmpty(e) => {
-                match &e.element {
+            }
+            BinaryTree::NonEmpty(node_box) => {
+                match &node_box.element {
                     Element::Num(_) => {
-                        let tmp_tree
-                            = std::mem::replace(tree,
-                                 BinaryTree::from_element(Element::Operator(operator)));
-                        tree.add_left_node_from_tree(tmp_tree);
-                        return Ok(None)
+                        Self::replace_and_add_left(tree, operator);
+                        self.index_plus();
                     },
-                    Element::Operator(op) => {
-                        if op.priority(&operator) {
-                            match tree.right() {
-                                None => return Err(format!("{:?}: syntax error", operator)),
-                                Some(_) => {
-                                    self.add_operator(tree.right_mut().unwrap(), operator)?;
-                                    Ok(self.while_next_token(tree.right_mut().unwrap())?)
-                                }
-                            }
+                    Element::Operator(tree_op) => {
+                        if tree_op.priority(&operator) {
+                            return self.while_next_token(tree.right_mut().unwrap())
                         } else {
-                            Ok(Some(Element::Operator(operator)))
-                            // let tmp_tree
-                            //     = std::mem::replace(tree,
-                            //         BinaryTree::from_element(Element::Operator(operator)));
-                            // tree.add_left_node_from_tree(tmp_tree);
-                            // return Ok(())
+                            return Ok(true);
                         }
-                    }
+                    },
                 }
             }
         }
+        Ok(false)
+    }
+
+    fn replace_and_add_left(tree: &mut BinaryTree<Element>, operator: Operator) {
+        let tmp_tree
+            = std::mem::replace(tree,
+                    BinaryTree::from_element(Element::Operator(operator)));
+        tree.add_left_node_from_tree(tmp_tree);
     }
 
     pub fn calculation(&self, tree: &BinaryTree<Element>) -> Result<Num, String> {
@@ -516,6 +530,12 @@ mod tests {
     fn calculation_multi_priority() {
         let code = "1 + 2^3 * 2".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(17.0)))
+    }
+
+    #[test]
+    fn calculation_double_priority() {
+        let code = "1 - 2 * 2 * 2 + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-2.0)))
     }
 
     #[test]
