@@ -5,20 +5,36 @@ mod num;
 mod binary_tree;
 mod parser;
 
-use lexer::Lexer;
+use lexer::{Lexer, Token};
 use parser::Parser;
 
 fn compute(code: String) -> Result<(), String> {
     let mut lexer = Lexer::new(&code);
     let vec = lexer.make_token_vec()?;
-    println!("{:?}", vec);
+    // println!("{:?}", vec);
 
-    let mut parser = Parser::new(vec);
+    let (left_vec, right_vec) = Parser::separate_equal(vec)?;
+
+    let mut parser = Parser::new(left_vec);
     let mut tree = parser.make_tree()?;
-    println!("{:?}", tree);
+    // println!("{:?}", tree);
 
-    let value = parser.calculation(&mut tree)?;
-    println!("{:?}", value);
+
+
+    let left_value = parser.calculation(&mut tree)?;
+    // println!("{:?}", left_value);
+
+    // let mut parser = Parser::new(right_vec);
+    // let mut tree = parser.make_tree()?;
+    // println!("{:?}", tree);
+
+    // let right_value = parser.calculation(&mut tree)?;
+    // println!("{:?}", right_value);
+
+    if Parser::is_question_tokens(&right_vec) {
+        println!("  {}", left_value);
+    }
+
     Ok(())
 }
 

@@ -1,3 +1,6 @@
+use std::fmt;
+
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Num {
     Float(f64),
@@ -78,6 +81,15 @@ impl Num {
             (Num::Float(l), Num::Float(r)) => {
                 Ok(Num::Float(l.powf(*r)))
             },
+        }
+    }
+}
+
+
+impl fmt::Display for Num {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Num::Float(n) => write!(f, "{}", n)
         }
     }
 }

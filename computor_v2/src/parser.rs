@@ -60,6 +60,34 @@ impl Parser {
         Parser { tokens, index: 0 }
     }
 
+    pub fn separate_equal(tokens: Vec<Token>) -> Result<(Vec<Token>, Vec<Token>), String> {
+        let mut left_vec = Vec::new();
+        let mut right_vec = Vec::new();
+        let mut equal_flag = false;
+        for token in tokens {
+            if token == Token::Equal {
+                if equal_flag {
+                    return Err("= appeared twice: syntax error".to_string())
+                }
+                equal_flag = true;
+            } else {
+                if equal_flag {
+                    right_vec.push(token);
+                } else {
+                    left_vec.push(token);
+                }
+            }
+        }
+        if !equal_flag {
+            return Err("= never appeared: syntax error".to_string())
+        }
+        Ok((left_vec, right_vec))
+    }
+
+    pub fn is_question_tokens(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 1 && tokens[0] == Token::Question
+    }
+
     pub fn make_tree(&mut self) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
         self.root_tree_loop(&mut tree)?;
