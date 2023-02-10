@@ -12,6 +12,8 @@ pub enum Operator {
     Rem,
     MatrixMul,
     Pow,
+    Paren,
+    RParen,
 }
 
 impl Operator {
@@ -30,7 +32,13 @@ impl Operator {
                     _ => false
                 }
             },
-            _ => false
+            Self::Pow => {
+                match rhs {
+                    Self::Paren => true,
+                    _ => false
+                }
+            },
+            _ => false,
         }
     }
 }
@@ -54,10 +62,21 @@ impl Parser {
 
     pub fn make_tree(&mut self) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
-        while self.index < self.tokens.len() {
-            self.search_add_point(&mut tree)?;
+        self.root_tree_loop(&mut tree)?;
+        if self.index < self.tokens.len() {
+            return Err(format!("syntax error"))
         }
         Ok(tree)
+    }
+
+    fn root_tree_loop(&mut self, tree: &mut BinaryTree<Element>) -> Result<(), String> {
+        while self.index < self.tokens.len() {
+            self.search_add_point(tree)?;
+            if self.is_r_paren() {
+                break
+            }
+        }
+        Ok(())
     }
 
     fn search_add_point(&mut self, tree: &mut BinaryTree<Element>) -> Result<(), String> {
@@ -76,6 +95,9 @@ impl Parser {
                             self.search_add_point(tree.right_mut().unwrap())?;
                         } else {
                             Self::replace_and_add_left(tree, operator);
+                            if !tree.left().unwrap().is_non_empty() {
+                                return Err(format!("syntax error"))
+                            }
                             self.index_plus();
                             self.while_next_token(tree)?;
                         }
@@ -148,6 +170,8 @@ impl Parser {
             Token::Slash => return self.add_operator(tree, Operator::Div),
             Token::Percent => return self.add_operator(tree, Operator::Rem),
             Token::Caret => return self.add_operator(tree, Operator::Pow),
+            Token::LParen => return self.add_paren(tree),
+            Token::RParen => return Ok(true),
             _ => return Err(format!("{:?}: wip", token))
         }
         Ok(false)
@@ -160,27 +184,32 @@ impl Parser {
     }
 
     fn add_num(&mut self, tree: &mut BinaryTree<Element>, num: Num) -> Result<(), String> {
-        let next_tree = match tree.left_mut() {
-            None => tree,
-            Some(l) => {
-                match l {
-                    BinaryTree::Empty => l,
+        let next_tree = match tree {
+            BinaryTree::Empty => tree,
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) => return Err(format!("{:?}: syntax error", num)),
+                    _ => {},
+                }
+                let left_tree = tree.left_mut().unwrap();
+                match left_tree {
+                    BinaryTree::Empty => left_tree,
                     BinaryTree::NonEmpty(_) => {
-                        let r = tree.right_mut().unwrap();
-                        if r.is_non_empty() {
+                        let right_tree = tree.right_mut().unwrap();
+                        if right_tree.is_non_empty() {
                             return Err(format!("{:?}: syntax error", num))
                         }
-                        r
-                    },
+                        right_tree
+                    }
                 }
-            },
+            }
         };
         *next_tree = BinaryTree::from_element(Element::Num(num));
         Ok(())
     }
 
     fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator) -> Result<bool, String> {
-        match tree {
+        match &tree {
             BinaryTree::Empty => {
                 // wip: 単項演算子
                 return Err(format!("{:?}: syntax error", operator))
@@ -192,6 +221,9 @@ impl Parser {
                         self.index_plus();
                     },
                     Element::Operator(tree_op) => {
+                        if !tree.right().unwrap().is_non_empty() {
+                            return Err(format!("syntax error"))
+                        }
                         if tree_op.priority(&operator) {
                             return self.while_next_token(tree.right_mut().unwrap())
                         } else {
@@ -204,11 +236,70 @@ impl Parser {
         Ok(false)
     }
 
+    fn add_paren(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        let paren_tree = match tree {
+            BinaryTree::Empty => {
+                *tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
+                self.index_plus();
+                self.root_tree_loop(tree.left_mut().unwrap())?;
+                tree
+            },
+            BinaryTree::NonEmpty(node_box) => {
+                let target_tree = match node_box.element {
+                    Element::Num(_) => {
+                        Self::replace_and_add_left(tree, Operator::Mul);
+                        tree
+                    }
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            let target_tree = tree.right_mut().unwrap();
+                            Self::replace_and_add_left(target_tree, Operator::Mul);
+                            target_tree
+                        } else {
+                            tree
+                        }
+                    },
+                };
+                let right_tree = target_tree.right_mut().unwrap();
+                *right_tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
+                self.index_plus();
+                self.root_tree_loop(right_tree.left_mut().unwrap())?;
+                right_tree
+            }
+        };
+        if !paren_tree.left().unwrap().is_non_empty() {
+            return Err(format!("{}: syntax error", "()"))
+        }
+        if self.is_r_paren() {
+            *paren_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
+            self.index_plus();
+        } else {
+            return Err(format!("{}: syntax error", "("))
+        }
+        Ok(false)
+    }
+
+    fn insert_mul(&mut self) {
+        self.tokens.insert(self.index, Token::Asterisk)
+    }
+
     fn replace_and_add_left(tree: &mut BinaryTree<Element>, operator: Operator) {
         let tmp_tree
             = std::mem::replace(tree,
                     BinaryTree::from_element(Element::Operator(operator)));
         tree.add_left_node_from_tree(tmp_tree);
+    }
+
+    fn is_r_paren(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::RParen => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
     }
 
     pub fn calculation(&self, tree: &BinaryTree<Element>) -> Result<Num, String> {
@@ -227,6 +318,7 @@ impl Parser {
                                 };
                                 let right_value = match &r.element {
                                     Element::Num(rn) => rn.clone(),
+                                    Element::Operator(Operator::RParen) => Num::Float(0.0),
                                     Element::Operator(_) => self.calculation(right_tree)?,
                                 };
                                 match op {
@@ -236,6 +328,7 @@ impl Parser {
                                     Operator::Div => left_value.supported_div(&right_value)?,
                                     Operator::Rem => left_value.supported_rem(&right_value)?,
                                     Operator::Pow => left_value.supported_pow(&right_value)?,
+                                    Operator::Paren => left_value,
                                     _ => todo!("wip matrix pattern"),
                                 }
                             },
@@ -542,5 +635,107 @@ mod tests {
     fn calculation_long() {
         let code = "1 + 2 * 3 - 8 / 2 % 3 + 2 ^ 3 * 2".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(22.0)))
+    }
+
+    #[test]
+    fn calculation_error_double_op() {
+        let code = "1 + + 2".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_double_num() {
+        let code = "2 3".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: Float(3.0): syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_double_op_double_num() {
+        let code = "1 + + 2 3".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_paren_single() {
+        let code = "(1+1)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(2.0)))
+    }
+
+    #[test]
+    fn calculation_paren_solo() {
+        let code = "(1)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(1.0)))
+    }
+
+    #[test]
+    fn calculation_paren_priority_plus() {
+        let code = "1 - (2 + 1)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-2.0)))
+    }
+
+    #[test]
+    fn calculation_paren_priority_mul() {
+        let code = "1 - 2 * (2 + 1)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-5.0)))
+    }
+
+    #[test]
+    fn calculation_paren_priority_pow() {
+        let code = "1 - 2 ^ (2 + 1) * 3".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-23.0)))
+    }
+
+    #[test]
+    fn calculation_paren_first() {
+        let code = "(1 + 1) * 3".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(6.0)))
+    }
+
+    #[test]
+    fn calculation_paren_repeat() {
+        let code = "(1 - (2 * 3)) * 3".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-15.0)))
+    }
+
+    #[test]
+    fn calculation_paren_left_no_mul() {
+        let code = "2 + 3 (3 - 1) + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(13.0)))
+    }
+
+    #[test]
+    fn calculation_paren_left_no_mul_pow() {
+        let code = "2 + 2 ^ 3 (3 - 1) + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(71.0)))
+    }
+
+    #[test]
+    fn calculation_paren_left_no_mul_after_pow() {
+        let code = "2 + 3 (3 - 1) ^ 2 + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(71.0)))
+    }
+
+    #[test]
+    fn calculation_paren_priority_long() {
+        let code = "1 - 2 ^ (2 + 1) * 3 + 2 * 3".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-17.0)))
+    }
+
+    #[test]
+    fn calculation_error_paren_only() {
+        let code = "1 + ()".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: (): syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_l_paren_only() {
+        let code = "1 + ( 3 + 4".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: (: syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_r_paren_only() {
+        let code = "1 + ) 3 + 4".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: syntax error".to_string()))
     }
 }
