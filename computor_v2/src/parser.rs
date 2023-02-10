@@ -245,22 +245,19 @@ impl Parser {
                 tree
             },
             BinaryTree::NonEmpty(node_box) => {
-                let target_tree = match node_box.element {
+                match node_box.element {
                     Element::Num(_) => {
-                        Self::replace_and_add_left(tree, Operator::Mul);
-                        tree
+                        self.insert_mul();
+                        return Ok(false)
                     }
                     Element::Operator(_) => {
                         if tree.right().unwrap().is_non_empty() {
-                            let target_tree = tree.right_mut().unwrap();
-                            Self::replace_and_add_left(target_tree, Operator::Mul);
-                            target_tree
-                        } else {
-                            tree
+                            self.insert_mul();
+                            return Ok(false)
                         }
                     },
-                };
-                let right_tree = target_tree.right_mut().unwrap();
+                }
+                let right_tree = tree.right_mut().unwrap();
                 *right_tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
                 self.index_plus();
                 self.root_tree_loop(right_tree.left_mut().unwrap())?;
@@ -273,6 +270,9 @@ impl Parser {
         if self.is_r_paren() {
             *paren_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
             self.index_plus();
+            if self.is_num() {
+                self.insert_mul();
+            }
         } else {
             return Err(format!("{}: syntax error", "("))
         }
@@ -295,6 +295,18 @@ impl Parser {
             Ok(token) => {
                 match token {
                     Token::RParen => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
+    }
+
+    fn is_num(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::NumString(_) => true,
                     _ => false,
                 }
             },
@@ -706,14 +718,27 @@ mod tests {
     #[test]
     fn calculation_paren_left_no_mul_pow() {
         let code = "2 + 2 ^ 3 (3 - 1) + 5".to_string();
-        assert_eq!(calculation_test(code), Ok(Num::Float(71.0)))
+        assert_eq!(calculation_test(code), Ok(Num::Float(23.0)))
     }
 
     #[test]
     fn calculation_paren_left_no_mul_after_pow() {
         let code = "2 + 3 (3 - 1) ^ 2 + 5".to_string();
-        assert_eq!(calculation_test(code), Ok(Num::Float(71.0)))
+        assert_eq!(calculation_test(code), Ok(Num::Float(19.0)))
     }
+
+    #[test]
+    fn calculation_paren_right_no_mul() {
+        let code = "2 + (3 - 1)3 + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(13.0)))
+    }
+    
+    #[test]
+    fn calculation_paren_right_no_mul_pow() {
+        let code = "2 + (3 - 1) 2 ^ 3 + 5".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(23.0)))
+    }
+
 
     #[test]
     fn calculation_paren_priority_long() {

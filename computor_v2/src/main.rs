@@ -8,6 +8,19 @@ mod parser;
 use lexer::Lexer;
 use parser::Parser;
 
+fn compute(code: String) -> Result<(), String> {
+    let mut lexer = Lexer::new(&code);
+    let vec = lexer.make_token_vec()?;
+    println!("{:?}", vec);
+
+    let mut parser = Parser::new(vec);
+    let mut tree = parser.make_tree()?;
+    println!("{:?}", tree);
+
+    let value = parser.calculation(&mut tree)?;
+    println!("{:?}", value);
+    Ok(())
+}
 
 fn interpreter() {
     loop {
@@ -24,35 +37,10 @@ fn interpreter() {
             break;
         }
 
-        let mut lexer = Lexer::new(&code);
-        let vec = match lexer.make_token_vec() {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("{}", e);
-                continue;
-            }
-        };
-        println!("{:?}", vec);
-
-        let mut parser = Parser::new(vec);
-        let mut tree = match parser.make_tree() {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("{}", e);
-                continue;
-            }
-        };
-        println!("{:?}", tree);
-
-        let value = match parser.calculation(&mut tree) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("{}", e);
-                continue;
-            }
-        };
-        println!("{:?}", value);
-        // 改行は入ってこない場合もある（^Dを2回）
+        match compute(code) {
+            Err(e) => println!("  {}", e),
+            _ => {},
+        }
     }
 }
 
