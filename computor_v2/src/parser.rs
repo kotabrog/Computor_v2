@@ -88,6 +88,17 @@ impl Parser {
         tokens.len() == 1 && tokens[0] == Token::Question
     }
 
+    pub fn is_variable_register(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 1 && if let Token::String(_) = tokens[0] {true} else {false}
+    }
+
+    pub fn get_string_token_string(token: &Token) -> Result<&String, String> {
+        match token {
+            Token::String(s) => Ok(s),
+            _ => Err("syntax error".to_string())
+        }
+    }
+
     pub fn make_tree(&mut self) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
         self.root_tree_loop(&mut tree)?;
