@@ -74,8 +74,6 @@ impl<'a> Lexer<'a> {
                         '-' => return Ok(Some(Token::Minus)),
                         '=' => return Ok(Some(Token::Equal)),
                         '?' => return Ok(Some(Token::Question)),
-                        'i' => return Ok(Some(Token::I)),
-                        'I' => return Err(format!("Unsupported character: {}", c)),
                         '*' => {
                             pending_string.push(c);
                             break PendingType::Asterisk;
@@ -99,7 +97,7 @@ impl<'a> Lexer<'a> {
                     match pending_flag {
                         PendingType::Asterisk => return Ok(Some(Token::Asterisk)),
                         PendingType::NumString => return Ok(Some(Token::NumString(Box::new(pending_string)))),
-                        PendingType::String => return Ok(Some(Token::String(Box::new(pending_string)))),
+                        PendingType::String => return Ok(Some(Self::string_to_token(pending_string))),
                     }
                 }
                 Some(c) => {
@@ -107,15 +105,15 @@ impl<'a> Lexer<'a> {
                         match pending_flag {
                             PendingType::Asterisk => return Ok(Some(Token::Asterisk)),
                             PendingType::NumString => return Ok(Some(Token::NumString(Box::new(pending_string)))),
-                            PendingType::String => return Ok(Some(Token::String(Box::new(pending_string)))),
+                            PendingType::String => return Ok(Some(Self::string_to_token(pending_string))),
                         }
                     }
                     match c {
-                        '(' | ')' | '[' | ']' | ',' | ';' | '^' | '/' | '%' | '+' | '-' | '=' | '?' | 'i' | 'I' => {
+                        '(' | ')' | '[' | ']' | ',' | ';' | '^' | '/' | '%' | '+' | '-' | '=' | '?' => {
                             match pending_flag {
                                 PendingType::Asterisk => return Ok(Some(Token::Asterisk)),
                                 PendingType::NumString => return Ok(Some(Token::NumString(Box::new(pending_string)))),
-                                PendingType::String => return Ok(Some(Token::String(Box::new(pending_string)))),
+                                PendingType::String => return Ok(Some(Self::string_to_token(pending_string))),
                             }
                         },
                         '*' => {
@@ -125,7 +123,7 @@ impl<'a> Lexer<'a> {
                                     return Ok(Some(Token::TwoAsterisk))
                                 },
                                 PendingType::NumString => return Ok(Some(Token::NumString(Box::new(pending_string)))),
-                                PendingType::String => return Ok(Some(Token::String(Box::new(pending_string)))),
+                                PendingType::String => return Ok(Some(Self::string_to_token(pending_string))),
                             }
                         },
                         '.' => {
@@ -148,7 +146,7 @@ impl<'a> Lexer<'a> {
                                     let c = self.next().unwrap();
                                     pending_string.push(c);
                                 },
-                                PendingType::String => return Ok(Some(Token::String(Box::new(pending_string)))),
+                                PendingType::String => return Ok(Some(Self::string_to_token(pending_string))),
                             }
                         }
                         'a'..='z' | 'A'..='Z' => {
@@ -165,6 +163,14 @@ impl<'a> Lexer<'a> {
                     }
                 }
             }
+        }
+    }
+
+    fn string_to_token(string: String) -> Token {
+        if string.len() == 1 && (string == "i" || string == "I") {
+            Token::I
+        } else {
+            Token::String(Box::new(string))
         }
     }
 
@@ -263,6 +269,15 @@ mod tests {
         let vec = lexer.make_token_vec();
         assert_eq!(vec, Ok(vec![NumString(Box::new("1".to_string()))]));
     }
+    
+    #[test]
+    fn lexer_i_in_characters() {
+        use Token::*;
+        let s = "aaIaa".to_string();
+        let mut lexer = Lexer::new(&s);
+        let vec = lexer.make_token_vec();
+        assert_eq!(vec, Ok(vec![String(Box::new("aaIaa".to_string()))]));
+    }
 
     #[test]
     fn lexer_unsupported_character() {
@@ -270,14 +285,6 @@ mod tests {
         let mut lexer = Lexer::new(&s);
         let vec = lexer.make_token_vec();
         assert_eq!(vec, Err("Unsupported character: }".to_string()));
-    }
-
-    #[test]
-    fn lexer_unsupported_character_i() {
-        let s = "aaIaa".to_string();
-        let mut lexer = Lexer::new(&s);
-        let vec = lexer.make_token_vec();
-        assert_eq!(vec, Err("Unsupported character: I".to_string()));
     }
 
     #[test]
