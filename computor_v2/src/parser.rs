@@ -45,6 +45,7 @@ impl Operator {
 
 #[derive(Debug, PartialEq)]
 pub enum Element {
+    Dummy,
     Operator(Operator),
     Num(Num),
 }
@@ -227,7 +228,7 @@ impl Parser {
             BinaryTree::Empty => tree,
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) => return Err(format!("{:?}: syntax error", num)),
+                    Element::Num(_) | Element::Dummy => return Err(format!("{:?}: syntax error", num)),
                     _ => {},
                 }
                 let left_tree = tree.left_mut().unwrap();
@@ -250,8 +251,14 @@ impl Parser {
     fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator) -> Result<bool, String> {
         match &tree {
             BinaryTree::Empty => {
-                // wip: 単項演算子
-                return Err(format!("{:?}: syntax error", operator))
+                match operator {
+                    Operator::Plus | Operator::Minus => {
+                        *tree = BinaryTree::from_element(Element::Operator(operator));
+                        self.index_plus();
+                        *tree.left_mut().unwrap() = BinaryTree::from_element(Element::Dummy);
+                    },
+                    _ => return Err(format!("Unsupported unary operators: syntax error"))
+                }
             }
             BinaryTree::NonEmpty(node_box) => {
                 match &node_box.element {
@@ -269,6 +276,7 @@ impl Parser {
                             return Ok(true);
                         }
                     },
+                    Element::Dummy => return Err(format!("syntax error"))
                 }
             }
         }
@@ -295,6 +303,7 @@ impl Parser {
                             return Ok(false)
                         }
                     },
+                    Element::Dummy => return Err(format!("syntax error"))
                 }
                 let right_tree = tree.right_mut().unwrap();
                 *right_tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
@@ -365,12 +374,14 @@ impl Parser {
                             (BinaryTree::NonEmpty(l), BinaryTree::NonEmpty(r)) => {
                                 let left_value = match &l.element {
                                     Element::Num(ln) => ln.clone(),
+                                    Element::Dummy => Num::Float(0.0),
                                     Element::Operator(_) => self.calculation(left_tree)?,
                                 };
                                 let right_value = match &r.element {
                                     Element::Num(rn) => rn.clone(),
                                     Element::Operator(Operator::RParen) => Num::Float(0.0),
                                     Element::Operator(_) => self.calculation(right_tree)?,
+                                    Element::Dummy => return Err(format!("syntax error")),
                                 };
                                 match op {
                                     Operator::Plus => left_value.supported_add(&right_value)?,
@@ -388,7 +399,8 @@ impl Parser {
                         value.checked_value()?;
                         return Ok(value)
                     },
-                    Element::Num(n) => return Ok(n.clone())
+                    Element::Num(n) => return Ok(n.clone()),
+                    Element::Dummy => return Ok(Num::Float(0.0)),
                 }
             }
         }
@@ -801,5 +813,29 @@ mod tests {
     fn calculation_error_r_paren_only() {
         let code = "1 + ) 3 + 4".to_string();
         assert_eq!(calculation_test(code), Err("error parser: syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_float_unary_plus() {
+        let code = "+ 2 * 3 + 4".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(10.0)))
+    }
+
+    #[test]
+    fn calculation_float_unary_minus() {
+        let code = "- 2 * 3 + 4".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-2.0)))
+    }
+
+    #[test]
+    fn calculation_float_unary_paren() {
+        let code = "+ 2 * 3 * ( -2 + 1 ) + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-5.0)))
+    }
+
+    #[test]
+    fn calculation_error_float_unary_mul() {
+        let code = "* 2 * 3 * ( -2 + 1 ) + 1".to_string();
+        assert_eq!(calculation_test(code), Err("error parser: Unsupported unary operators: syntax error".to_string()))
     }
 }
