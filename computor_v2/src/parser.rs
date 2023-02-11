@@ -1,47 +1,8 @@
 use crate::num::Num;
 use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
+use crate::operator::Operator;
 
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Operator {
-    Plus,
-    Minus,
-    Mul,
-    Div,
-    Rem,
-    MatrixMul,
-    Pow,
-    Paren,
-    RParen,
-}
-
-impl Operator {
-    /// rhs has higher priority than self
-    pub fn priority(&self, rhs: &Self) -> bool {
-        match *self {
-            Self::Plus | Self::Minus => {
-                match rhs {
-                    Self::Mul | Self::Div | Self::Rem | Self::MatrixMul | Self::Pow => true,
-                    _ => false
-                }
-            },
-            Self::Mul | Self::Div | Self::Rem | Self::MatrixMul => {
-                match rhs {
-                    Self::Pow => true,
-                    _ => false
-                }
-            },
-            Self::Pow => {
-                match rhs {
-                    Self::Paren => true,
-                    _ => false
-                }
-            },
-            _ => false,
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum Element {

@@ -5,6 +5,7 @@ mod num;
 mod binary_tree;
 mod parser;
 mod data_base;
+mod operator;
 
 use lexer::{Lexer, Token};
 use parser::Parser;
