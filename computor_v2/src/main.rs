@@ -11,6 +11,7 @@ use lexer::{Lexer, Token};
 use parser::Parser;
 use data_base::DataBase;
 
+
 fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
     let mut lexer = Lexer::new(&code);
     let vec = lexer.make_token_vec()?;
@@ -22,8 +23,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         let mut parser = Parser::new(right_vec);
         let mut tree = parser.make_tree()?;
         // println!("{:?}", tree);
-    
-        let right_value = parser.calculation(&mut tree)?;
+
+        let right_value = parser.calculation(&mut tree, data_base)?;
         // println!("{:?}", right_value);
 
         let key = Parser::get_string_token_string(&left_vec[0])?;
@@ -33,8 +34,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         let mut parser = Parser::new(left_vec);
         let mut tree = parser.make_tree()?;
         // println!("{:?}", tree);
-    
-        let left_value = parser.calculation(&mut tree)?;
+
+        let left_value = parser.calculation(&mut tree, data_base)?;
         // println!("{:?}", left_value);
 
         println!("  {}", left_value);

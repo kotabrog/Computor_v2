@@ -2,6 +2,7 @@ use crate::num::Num;
 use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
 use crate::operator::Operator;
+use crate::data_base::{DataBase, self};
 
 
 #[derive(Debug, PartialEq)]
@@ -9,6 +10,7 @@ pub enum Element {
     Dummy,
     Operator(Operator),
     Num(Num),
+    Variable(Box<String>),
 }
 
 pub struct Parser {
@@ -173,6 +175,10 @@ impl Parser {
             Token::Caret => return self.add_operator(tree, Operator::Pow),
             Token::LParen => return self.add_paren(tree),
             Token::RParen => return Ok(true),
+            Token::String(s) => {
+                let string_box = s.clone();
+                return self.add_variable(tree, string_box)
+            },
             _ => return Err(format!("{:?}: wip", token))
         }
         Ok(false)
@@ -189,7 +195,8 @@ impl Parser {
             BinaryTree::Empty => tree,
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) | Element::Dummy => return Err(format!("{:?}: syntax error", num)),
+                    Element::Num(_) | Element::Dummy | Element::Variable(_)
+                        => return Err(format!("{:?}: syntax error", num)),
                     _ => {},
                 }
                 let left_tree = tree.left_mut().unwrap();
@@ -223,7 +230,7 @@ impl Parser {
             }
             BinaryTree::NonEmpty(node_box) => {
                 match &node_box.element {
-                    Element::Num(_) => {
+                    Element::Num(_) | Element::Variable(_) => {
                         Self::replace_and_add_left(tree, operator);
                         self.index_plus();
                     },
@@ -254,7 +261,7 @@ impl Parser {
             },
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) => {
+                    Element::Num(_) | Element::Variable(_) => {
                         self.insert_mul();
                         return Ok(false)
                     }
@@ -279,11 +286,38 @@ impl Parser {
         if self.is_r_paren() {
             *paren_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
             self.index_plus();
-            if self.is_num() {
+            if self.is_num() || self.is_string_token() {
                 self.insert_mul();
             }
         } else {
             return Err(format!("{}: syntax error", "("))
+        }
+        Ok(false)
+    }
+
+    fn add_variable(&mut self, tree: &mut BinaryTree<Element>, string_box: Box<String>) -> Result<bool, String> {
+        let next_tree = match tree {
+            BinaryTree::Empty => tree,
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) | Element::Variable(_) => {
+                        self.insert_mul();
+                        return Ok(false)
+                    }
+                    Element::Dummy => return Err(format!("{}: syntax error", string_box)),
+                    _ => {},
+                }
+                let right_tree = tree.right_mut().unwrap();
+                if right_tree.is_non_empty() {
+                    return Err(format!("{}: syntax error", string_box))
+                }
+                right_tree
+            }
+        };
+        *next_tree = BinaryTree::from_element(Element::Variable(string_box));
+        self.index_plus();
+        if self.is_num() || self.is_string_token() {
+            self.insert_mul();
         }
         Ok(false)
     }
@@ -323,7 +357,19 @@ impl Parser {
         }
     }
 
-    pub fn calculation(&self, tree: &BinaryTree<Element>) -> Result<Num, String> {
+    fn is_string_token(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::String(_) => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
+    }
+
+    pub fn calculation(&self, tree: &BinaryTree<Element>, data_base: &DataBase) -> Result<Num, String> {
         match tree {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
@@ -336,13 +382,25 @@ impl Parser {
                                 let left_value = match &l.element {
                                     Element::Num(ln) => ln.clone(),
                                     Element::Dummy => Num::Float(0.0),
-                                    Element::Operator(_) => self.calculation(left_tree)?,
+                                    Element::Operator(_) => self.calculation(left_tree, data_base)?,
+                                    Element::Variable(v) => {
+                                        match data_base.get(v) {
+                                            None => return Err(format!("{}: Undefined Variables", v)),
+                                            Some(n) => n.clone()
+                                        }
+                                    }
                                 };
                                 let right_value = match &r.element {
                                     Element::Num(rn) => rn.clone(),
                                     Element::Operator(Operator::RParen) => Num::Float(0.0),
-                                    Element::Operator(_) => self.calculation(right_tree)?,
+                                    Element::Operator(_) => self.calculation(right_tree, data_base)?,
                                     Element::Dummy => return Err(format!("syntax error")),
+                                    Element::Variable(v) => {
+                                        match data_base.get(v) {
+                                            None => return Err(format!("{}: Undefined Variables", v)),
+                                            Some(n) => n.clone()
+                                        }
+                                    }
                                 };
                                 match op {
                                     Operator::Plus => left_value.supported_add(&right_value)?,
@@ -362,6 +420,12 @@ impl Parser {
                     },
                     Element::Num(n) => return Ok(n.clone()),
                     Element::Dummy => return Ok(Num::Float(0.0)),
+                    Element::Variable(v) => {
+                        match data_base.get(v) {
+                            None => Err(format!("{}: Undefined Variables", v)),
+                            Some(n) => Ok(n.clone())
+                        }
+                    }
                 }
             }
         }
@@ -385,7 +449,12 @@ mod tests {
             Ok(v) => v,
             Err(e) => return Err(format!("error parser: {}", e))
         };
-        match parser.calculation(&tree) {
+        let mut data_base = DataBase::new();
+        let name = "x".to_string();
+        data_base.register(&name, Num::Float(2.0));
+        let name = "y".to_string();
+        data_base.register(&name, Num::Float(-2.0));
+        match parser.calculation(&tree, &data_base) {
             Ok(v) => Ok(v),
             Err(e) => Err(format!("error calculation: {}", e))
         }
@@ -798,5 +867,35 @@ mod tests {
     fn calculation_error_float_unary_mul() {
         let code = "* 2 * 3 * ( -2 + 1 ) + 1".to_string();
         assert_eq!(calculation_test(code), Err("error parser: Unsupported unary operators: syntax error".to_string()))
+    }
+
+    #[test]
+    fn calculation_variable_normal() {
+        let code = "x + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(3.0)))
+    }
+
+    #[test]
+    fn calculation_double_variable() {
+        let code = "x + y + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(1.0)))
+    }
+
+    #[test]
+    fn calculation_variable_chain() {
+        let code = "2 x y 3 + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(-23.0)))
+    }
+
+    #[test]
+    fn calculation_variable_paren() {
+        let code = "2 x y (1 - 2) + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(9.0)))
+    }
+
+    #[test]
+    fn calculation_error_variable_not_found() {
+        let code = "2a + 1".to_string();
+        assert_eq!(calculation_test(code), Err("error calculation: a: Undefined Variables".to_string()))
     }
 }
