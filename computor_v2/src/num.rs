@@ -83,6 +83,14 @@ impl Num {
             },
         }
     }
+
+
+    pub fn is_negative(&self) -> bool {
+        match self {
+            Num::Float(n) => n.is_sign_negative(),
+            _ => false,
+        }
+    }
 }
 
 

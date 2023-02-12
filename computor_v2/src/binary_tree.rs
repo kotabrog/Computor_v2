@@ -1,11 +1,11 @@
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BinaryTree<T> {
     Empty,
     NonEmpty(Box<TreeNode<T>>),
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TreeNode<T> {
     pub element: T,
     left: BinaryTree<T>,
@@ -62,6 +62,15 @@ impl<T> BinaryTree<T> {
         match self {
             BinaryTree::Empty => None,
             BinaryTree::NonEmpty(b) => Some(&mut b.right)
+        }
+    }
+
+    pub fn set_element(&mut self, element: T) -> Option<T> {
+        match self {
+            BinaryTree::Empty => None,
+            BinaryTree::NonEmpty(b) => {
+                Some(std::mem::replace(&mut b.element, element))
+            }
         }
     }
 

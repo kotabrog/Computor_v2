@@ -2,7 +2,7 @@ use crate::num::Num;
 use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
 use crate::operator::Operator;
-use crate::data_base::{DataBase, self};
+use crate::data_base::DataBase;
 
 
 #[derive(Debug, PartialEq)]
@@ -370,64 +370,70 @@ impl Parser {
         }
     }
 
-    pub fn calculation(&self, tree: &BinaryTree<Element>, data_base: &DataBase) -> Result<Num, String> {
-        match tree {
+    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<Option<Num>, String> {
+        match &tree {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
-                match &node_box.element {
+                let op = match &node_box.element {
+                    Element::Operator(Operator::RParen) => return Ok(Some(Num::Float(0.0))),
                     Element::Operator(op) => {
-                        let left_tree = tree.left().unwrap();
-                        let right_tree = tree.right().unwrap();
-                        let value = match (left_tree, right_tree) {
-                            (BinaryTree::NonEmpty(l), BinaryTree::NonEmpty(r)) => {
-                                let left_value = match &l.element {
-                                    Element::Num(ln) => ln.clone(),
-                                    Element::Dummy => Num::Float(0.0),
-                                    Element::Operator(_) => self.calculation(left_tree, data_base)?,
-                                    Element::Variable(v) => {
-                                        match data_base.get(v) {
-                                            None => return Err(format!("{}: Undefined Variables", v)),
-                                            Some(n) => n.clone()
-                                        }
-                                    }
-                                };
-                                let right_value = match &r.element {
-                                    Element::Num(rn) => rn.clone(),
-                                    Element::Operator(Operator::RParen) => Num::Float(0.0),
-                                    Element::Operator(_) => self.calculation(right_tree, data_base)?,
-                                    Element::Dummy => return Err(format!("syntax error")),
-                                    Element::Variable(v) => {
-                                        match data_base.get(v) {
-                                            None => return Err(format!("{}: Undefined Variables", v)),
-                                            Some(n) => n.clone()
-                                        }
-                                    }
-                                };
-                                match op {
-                                    Operator::Plus => left_value.supported_add(&right_value)?,
-                                    Operator::Minus => left_value.supported_sub(&right_value)?,
-                                    Operator::Mul => left_value.supported_mul(&right_value)?,
-                                    Operator::Div => left_value.supported_div(&right_value)?,
-                                    Operator::Rem => left_value.supported_rem(&right_value)?,
-                                    Operator::Pow => left_value.supported_pow(&right_value)?,
-                                    Operator::Paren => left_value,
-                                    _ => todo!("wip matrix pattern"),
-                                }
-                            },
-                            _ => return Err(format!("syntax error")),
-                        };
-                        value.checked_value()?;
-                        return Ok(value)
+                        op.clone()
                     },
-                    Element::Num(n) => return Ok(n.clone()),
-                    Element::Dummy => return Ok(Num::Float(0.0)),
+                    Element::Num(n) => return Ok(Some(n.clone())),
+                    Element::Dummy => return Ok(Some(Num::Float(0.0))),
                     Element::Variable(v) => {
                         match data_base.get(v) {
-                            None => Err(format!("{}: Undefined Variables", v)),
-                            Some(n) => Ok(n.clone())
+                            None => return Ok(None),
+                            Some(n) => {
+                                *tree = BinaryTree::from_element(Element::Num(n.clone()));
+                                return Ok(Some(n.clone()))
+                            }
                         }
                     }
-                }
+                };
+
+                let left_tree = tree.left().unwrap();
+                let right_tree = tree.right().unwrap();
+                match (left_tree, right_tree) {
+                    (BinaryTree::NonEmpty(_), BinaryTree::NonEmpty(_)) => {}
+                    _ => return Err(format!("syntax error")),
+                };
+                let left_value_option =
+                    self.calculation(tree.left_mut().unwrap(), data_base)?;
+                let right_value_option =
+                    self.calculation(tree.right_mut().unwrap(), data_base)?;
+                let value = match (left_value_option, right_value_option) {
+                    (Some(left_value), Some(right_value)) => {
+                        match op {
+                            Operator::Plus => left_value.supported_add(&right_value)?,
+                            Operator::Minus => left_value.supported_sub(&right_value)?,
+                            Operator::Mul => left_value.supported_mul(&right_value)?,
+                            Operator::Div => left_value.supported_div(&right_value)?,
+                            Operator::Rem => left_value.supported_rem(&right_value)?,
+                            Operator::Pow => left_value.supported_pow(&right_value)?,
+                            Operator::Paren => left_value,
+                            _ => todo!("wip matrix pattern"),
+                        }
+                    },
+                    (_, Some(right_value)) => {
+                        match op {
+                            Operator::Minus => {
+                                if right_value.is_negative() {
+                                    let num = Num::Float(-1.0);
+                                    let num = right_value.supported_mul(&num).unwrap();
+                                    *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num));
+                                    tree.set_element(Element::Operator(Operator::Plus));
+                                }
+                                return Ok(None)
+                            },
+                            _ => return Ok(None)
+                        }
+                    }
+                    _ => return Ok(None)
+                };
+                value.checked_value()?;
+                *tree = BinaryTree::from_element(Element::Num(value.clone()));
+                return Ok(Some(value))
             }
         }
     }
@@ -488,7 +494,7 @@ mod tests {
             Err(e) => return Err(format!("error lexer: {}", e))
         };
         let mut parser = Parser::new(vec);
-        let tree = match parser.make_tree() {
+        let mut tree = match parser.make_tree() {
             Ok(v) => v,
             Err(e) => return Err(format!("error parser: {}", e))
         };
@@ -497,8 +503,13 @@ mod tests {
         data_base.register(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register(&name, Num::Float(-2.0));
-        match parser.calculation(&tree, &data_base) {
-            Ok(v) => Ok(v),
+        match parser.calculation(&mut tree, &data_base) {
+            Ok(v) => {
+                match v {
+                    Some(v) => Ok(v),
+                    None => Err(format!("error calculation"))
+                }
+            },
             Err(e) => Err(format!("error calculation: {}", e))
         }
     }
@@ -519,6 +530,33 @@ mod tests {
                 }
             },
             Err(e) => format!("error parser: {}", e)
+        }
+    }
+
+    fn calculation_and_print_test(code: String) -> String {
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => return format!("error lexer: {}", e)
+        };
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree() {
+            Ok(v) => v,
+            Err(e) => return format!("error parser: {}", e)
+        };
+        let mut data_base = DataBase::new();
+        let name = "x".to_string();
+        data_base.register(&name, Num::Float(2.0));
+        let name = "y".to_string();
+        data_base.register(&name, Num::Float(-2.0));
+        match parser.calculation(&mut tree, &data_base) {
+            Ok(_) => {
+                match parser.print_tree(&tree) {
+                    Ok(s) => s,
+                    Err(e) => format!("error print_tree: {}", e),
+                }
+            }
+            Err(e) => format!("error calculation: {}", e)
         }
     }
 
@@ -976,7 +1014,7 @@ mod tests {
     #[test]
     fn calculation_error_variable_not_found() {
         let code = "2a + 1".to_string();
-        assert_eq!(calculation_test(code), Err("error calculation: a: Undefined Variables".to_string()))
+        assert_eq!(calculation_test(code), Err("error calculation".to_string()))
     }
 
     #[test]
@@ -989,5 +1027,29 @@ mod tests {
     fn print_tree_long() {
         let code = "- 1 + 2 (x + y) ^ 2 * 3 - 2x".to_string();
         assert_eq!(parse_and_print_test(code), format!("- 1 + 2 * ( x + y ) ^ 2 * 3 - 2 * x"))
+    }
+
+    #[test]
+    fn calculation_and_print_num() {
+        let code = "- 1 + 2 (x + y) ^ 2 * 3 - 2x".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("-5"))
+    }
+
+    #[test]
+    fn calculation_and_print_ab() {
+        let code = "- 1 + 2 (a + b) ^ 2 * 3 - 2a".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("-1 + 2 * ( a + b ) ^ 2 * 3 - 2 * a"))
+    }
+
+    #[test]
+    fn calculation_and_print_minus_minus() {
+        let code = "a - y".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a + 2"))
+    }
+
+    #[test]
+    fn calculation_and_print_axy() {
+        let code = "- 1 + 2 (x + a) ^ 2 * 3 - 2y".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("-1 + 2 * ( 2 + a ) ^ 2 * 3 + 4"))
     }
 }

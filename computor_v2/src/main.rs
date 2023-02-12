@@ -25,6 +25,10 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         // println!("{:?}", tree);
 
         let right_value = parser.calculation(&mut tree, data_base)?;
+        let right_value = match right_value {
+            Some(v) => v,
+            None => return Err(format!("Undefined Variables")),
+        };
         // println!("{:?}", right_value);
 
         let key = Parser::get_string_token_string(&left_vec[0])?;
@@ -36,6 +40,10 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         // println!("{:?}", tree);
 
         let left_value = parser.calculation(&mut tree, data_base)?;
+        let left_value = match left_value {
+            Some(v) => v,
+            None => return Err(format!("Undefined Variables")),
+        };
         // println!("{:?}", left_value);
 
         println!("  {}", left_value);
