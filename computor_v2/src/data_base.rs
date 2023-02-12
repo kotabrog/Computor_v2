@@ -20,6 +20,7 @@ impl DataBase {
     }
 
     pub fn get(&self, name: &String) -> Option<&Num> {
-        self.data.get(name)
+        let name = name.as_str().to_lowercase();
+        self.data.get(&name)
     }
 }

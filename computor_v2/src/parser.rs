@@ -876,6 +876,12 @@ mod tests {
     }
 
     #[test]
+    fn calculation_variable_upper() {
+        let code = "X + 1".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(3.0)))
+    }
+
+    #[test]
     fn calculation_double_variable() {
         let code = "x + y + 1".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(1.0)))
@@ -883,7 +889,7 @@ mod tests {
 
     #[test]
     fn calculation_variable_chain() {
-        let code = "2 x y 3 + 1".to_string();
+        let code = "2x y 3 + 1".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(-23.0)))
     }
 
