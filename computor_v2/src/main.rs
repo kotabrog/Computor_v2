@@ -39,6 +39,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         // println!("{:?}", left_value);
 
         println!("  {}", left_value);
+    } else {
+        println!("  {}", "Unsupported format");
     }
 
     // println!("{:?}", data_base);

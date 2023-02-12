@@ -305,13 +305,14 @@ impl Parser {
                         return Ok(false)
                     }
                     Element::Dummy => return Err(format!("{}: syntax error", string_box)),
-                    _ => {},
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            self.insert_mul();
+                            return Ok(false)
+                        }
+                    },
                 }
-                let right_tree = tree.right_mut().unwrap();
-                if right_tree.is_non_empty() {
-                    return Err(format!("{}: syntax error", string_box))
-                }
-                right_tree
+                tree.right_mut().unwrap()
             }
         };
         *next_tree = BinaryTree::from_element(Element::Variable(string_box));
@@ -430,6 +431,48 @@ impl Parser {
             }
         }
     }
+
+    pub fn print_tree(&self, tree: &BinaryTree<Element>) -> Result<String, String> {
+        let mut expr = String::new();
+        Self::print_tree_loop(tree, &mut expr)?;
+        expr.pop();
+        Ok(expr)
+    }
+
+    pub fn print_tree_loop(tree: &BinaryTree<Element>, expr: &mut String) -> Result<(), String> {
+        match tree {
+            BinaryTree::Empty => return Err(format!("syntax error")),
+            BinaryTree::NonEmpty(node_box) => {
+                match &node_box.element {
+                    Element::Operator(op) => {
+                        if let Operator::RParen = op {
+                            *expr += format!("{} ", op).as_str();
+                            return Ok(())
+                        } else if let Operator::Paren = op {
+                            *expr += format!("{} ", op).as_str();
+                        }
+                        let left_tree = tree.left().unwrap();
+                        let right_tree = tree.right().unwrap();
+                        match (left_tree, right_tree) {
+                            (BinaryTree::NonEmpty(_), BinaryTree::NonEmpty(_)) => {
+                                Self::print_tree_loop(left_tree, expr)?;
+                                match op {
+                                    Operator::RParen | Operator::Paren => {},
+                                    _ => *expr += format!("{} ", op).as_str(),
+                                }
+                                Self::print_tree_loop(right_tree, expr)?;
+                            },
+                            _ => return Err(format!("syntax error")),
+                        }
+                    },
+                    Element::Num(n) => *expr += format!("{} ", n).as_str(),
+                    Element::Dummy => {},
+                    Element::Variable(v) => *expr += format!("{} ", v).as_str(),
+                }
+            },
+        }
+        Ok(())
+    }
 }
 
 
@@ -457,6 +500,25 @@ mod tests {
         match parser.calculation(&tree, &data_base) {
             Ok(v) => Ok(v),
             Err(e) => Err(format!("error calculation: {}", e))
+        }
+    }
+
+    fn parse_and_print_test(code: String) -> String {
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => return format!("error lexer: {}", e)
+        };
+        let mut parser = Parser::new(vec);
+        match parser.make_tree() {
+            Ok(v) => {
+                let tree = v;
+                match parser.print_tree(&tree) {
+                    Ok(s) => s,
+                    Err(e) => format!("error print_tree: {}", e),
+                }
+            },
+            Err(e) => format!("error parser: {}", e)
         }
     }
 
@@ -900,8 +962,32 @@ mod tests {
     }
 
     #[test]
+    fn calculation_variable_in_paren() {
+        let code = "2 (x)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(4.0)))
+    }
+
+    #[test]
+    fn calculation_variable_last() {
+        let code = "2 + x".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(4.0)))
+    }
+
+    #[test]
     fn calculation_error_variable_not_found() {
         let code = "2a + 1".to_string();
         assert_eq!(calculation_test(code), Err("error calculation: a: Undefined Variables".to_string()))
+    }
+
+    #[test]
+    fn print_tree_normal() {
+        let code = "2x + 1".to_string();
+        assert_eq!(parse_and_print_test(code), format!("2 * x + 1"))
+    }
+
+    #[test]
+    fn print_tree_long() {
+        let code = "- 1 + 2 (x + y) ^ 2 * 3 - 2x".to_string();
+        assert_eq!(parse_and_print_test(code), format!("- 1 + 2 * ( x + y ) ^ 2 * 3 - 2 * x"))
     }
 }
