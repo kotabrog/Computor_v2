@@ -415,31 +415,14 @@ impl Parser {
                             _ => todo!("wip matrix pattern"),
                         }
                     },
-                    (_, Some(right_value)) => {
-                        if right_value.is_negative() {
-                            match op {
-                                Operator::Minus | Operator::Plus => {
-                                    let num = Num::Float(-1.0);
-                                    let num = right_value.supported_mul(&num).unwrap();
-                                    *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num));
-                                    if let Operator::Minus = op {
-                                        tree.set_element(Element::Operator(Operator::Plus));
-                                    } else {
-                                        tree.set_element(Element::Operator(Operator::Minus));
-                                    }
-                                },
-                                Operator::Mul | Operator::Div | Operator::Rem | Operator::Pow | Operator::MatrixMul => {
-                                    *tree.right_mut().unwrap() = BinaryTree::from_element_and_tree(
-                                        Element::Operator(Operator::Paren),
-                                        BinaryTree::from_element(Element::Num(right_value)),
-                                        BinaryTree::from_element(Element::Operator(Operator::RParen)),
-                                    )
-                                }
-                                Operator::Paren | Operator::RParen => return Err(format!("syntax error"))
-                            }
-                        }
+                    (None, Some(right_value)) => {
+                        Self::add_paren_to_negative_value(tree, &right_value, &op, true)?;
                         return Ok(None)
-                    }
+                    },
+                    (Some(left_value), None) => {
+                        Self::add_paren_to_negative_value(tree, &left_value, &op, false)?;
+                        return Ok(None)
+                    },
                     _ => return Ok(None)
                 };
                 value.checked_value()?;
@@ -447,6 +430,35 @@ impl Parser {
                 return Ok(Some(value))
             }
         }
+    }
+
+    fn add_paren_to_negative_value(tree: &mut BinaryTree<Element>, value: &Num, op: &Operator, right: bool) -> Result<(), String> {
+        if value.is_negative() {
+            match op {
+                Operator::Minus | Operator::Plus => {
+                    if right {
+                        let num = Num::Float(-1.0);
+                        let num = value.supported_mul(&num).unwrap();
+                        *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num));
+                        if let Operator::Minus = op {
+                            tree.set_element(Element::Operator(Operator::Plus));
+                        } else {
+                            tree.set_element(Element::Operator(Operator::Minus));
+                        }
+                    }
+                },
+                Operator::Mul | Operator::Div | Operator::Rem | Operator::Pow | Operator::MatrixMul => {
+                    let tmp_tree = if right {tree.right_mut().unwrap()} else {tree.left_mut().unwrap()};
+                    *tmp_tree = BinaryTree::from_element_and_tree(
+                        Element::Operator(Operator::Paren),
+                        BinaryTree::from_element(Element::Num(value.clone())),
+                        BinaryTree::from_element(Element::Operator(Operator::RParen)),
+                    )
+                }
+                Operator::Paren | Operator::RParen => return Err(format!("syntax error"))
+            }
+        }
+        Ok(())
     }
 
     pub fn print_tree(&self, tree: &BinaryTree<Element>) -> Result<String, String> {
@@ -1068,6 +1080,12 @@ mod tests {
     fn calculation_and_print_mul_minus() {
         let code = "a * y".to_string();
         assert_eq!(calculation_and_print_test(code), format!("a * ( -2 )"))
+    }
+
+    #[test]
+    fn calculation_and_print_minus_mul() {
+        let code = "y ^ a".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("( -2 ) ^ a"))
     }
 
     #[test]
