@@ -32,8 +32,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         // println!("{:?}", right_value);
 
         let key = Parser::get_string_token_string(&left_vec[0])?;
-        data_base.register(key, right_value);
-        println!("  {}", data_base.get(&key).unwrap());
+        data_base.register_num(key, right_value);
+        println!("  {}", data_base.get_num(&key).unwrap());
     } else if Parser::is_question_tokens(&right_vec){
         let mut parser = Parser::new(left_vec);
         let mut tree = parser.make_tree()?;

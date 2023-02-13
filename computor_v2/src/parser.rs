@@ -382,7 +382,7 @@ impl Parser {
                     Element::Num(n) => return Ok(Some(n.clone())),
                     Element::Dummy => return Ok(Some(Num::Float(0.0))),
                     Element::Variable(v) => {
-                        match data_base.get(v) {
+                        match data_base.get_num(v) {
                             None => return Ok(None),
                             Some(n) => {
                                 *tree = BinaryTree::from_element(Element::Num(n.clone()));
@@ -523,9 +523,9 @@ mod tests {
         };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
-        data_base.register(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0));
         match parser.calculation(&mut tree, &data_base) {
             Ok(v) => {
                 match v {
@@ -569,9 +569,9 @@ mod tests {
         };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
-        data_base.register(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0));
         match parser.calculation(&mut tree, &data_base) {
             Ok(_) => {
                 match parser.print_tree(&tree) {
