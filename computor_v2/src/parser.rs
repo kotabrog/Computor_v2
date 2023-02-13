@@ -1,5 +1,5 @@
 use crate::num::Num;
-use crate::binary_tree::BinaryTree;
+use crate::binary_tree::{BinaryTree, TreeNode};
 use crate::lexer::Token;
 use crate::operator::Operator;
 use crate::data_base::DataBase;
@@ -416,18 +416,29 @@ impl Parser {
                         }
                     },
                     (_, Some(right_value)) => {
-                        match op {
-                            Operator::Minus => {
-                                if right_value.is_negative() {
+                        if right_value.is_negative() {
+                            match op {
+                                Operator::Minus | Operator::Plus => {
                                     let num = Num::Float(-1.0);
                                     let num = right_value.supported_mul(&num).unwrap();
                                     *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num));
-                                    tree.set_element(Element::Operator(Operator::Plus));
+                                    if let Operator::Minus = op {
+                                        tree.set_element(Element::Operator(Operator::Plus));
+                                    } else {
+                                        tree.set_element(Element::Operator(Operator::Minus));
+                                    }
+                                },
+                                Operator::Mul | Operator::Div | Operator::Rem | Operator::Pow | Operator::MatrixMul => {
+                                    *tree.right_mut().unwrap() = BinaryTree::from_element_and_tree(
+                                        Element::Operator(Operator::Paren),
+                                        BinaryTree::from_element(Element::Num(right_value)),
+                                        BinaryTree::from_element(Element::Operator(Operator::RParen)),
+                                    )
                                 }
-                                return Ok(None)
-                            },
-                            _ => return Ok(None)
+                                Operator::Paren | Operator::RParen => return Err(format!("syntax error"))
+                            }
                         }
+                        return Ok(None)
                     }
                     _ => return Ok(None)
                 };
@@ -1045,6 +1056,18 @@ mod tests {
     fn calculation_and_print_minus_minus() {
         let code = "a - y".to_string();
         assert_eq!(calculation_and_print_test(code), format!("a + 2"))
+    }
+
+    #[test]
+    fn calculation_and_print_plus_minus() {
+        let code = "a + y".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a - 2"))
+    }
+
+    #[test]
+    fn calculation_and_print_mul_minus() {
+        let code = "a * y".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a * ( -2 )"))
     }
 
     #[test]

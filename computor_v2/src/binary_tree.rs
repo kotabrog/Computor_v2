@@ -21,13 +21,17 @@ impl<T> BinaryTree<T> {
     pub fn from_node(node: TreeNode<T>) -> BinaryTree<T> {
         BinaryTree::NonEmpty(Box::new(node))
     }
-
-    pub fn from_element(element: T) -> BinaryTree<T> {
+    
+    pub fn from_element_and_tree(element: T, left: BinaryTree<T>, right: BinaryTree<T>) -> BinaryTree<T> {
         Self::from_node(TreeNode {
             element,
-            left: BinaryTree::new(),
-            right: BinaryTree::new(),
+            left: left,
+            right: right,
         })
+    }
+
+    pub fn from_element(element: T) -> BinaryTree<T> {
+        Self::from_element_and_tree(element, BinaryTree::new(), BinaryTree::new())
     }
 
     pub fn is_non_empty(&self) -> bool {
