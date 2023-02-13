@@ -8,7 +8,7 @@ use crate::parser::Element;
 #[derive(Debug, PartialEq)]
 pub enum Data {
     Num(Num),
-    Func(BinaryTree<Element>)
+    Func(Box<(BinaryTree<Element>, String)>)
 }
 
 
@@ -28,6 +28,11 @@ impl DataBase {
         self.data.insert(name, Data::Num(num));
     }
 
+    pub fn register_func(&mut self, name: &String, tree: BinaryTree<Element>, variable: String) {
+        let name = name.as_str().to_lowercase();
+        self.data.insert(name, Data::Func(Box::new((tree, variable))));
+    }
+
     pub fn get(&self, name: &String) -> Option<&Data> {
         let name = name.as_str().to_lowercase();
         self.data.get(&name)
@@ -41,6 +46,17 @@ impl DataBase {
         match data {
             Data::Num(n) => Some(n),
             Data::Func(f) => None,
+        }
+    }
+
+    pub fn get_func(&self, name: &String) -> Option<&Box<(BinaryTree<Element>, String)>> {
+        let data = match self.get(name) {
+            Some(d) => d,
+            None => return None,
+        };
+        match data {
+            Data::Num(n) => None,
+            Data::Func(f) => Some(f),
         }
     }
 }

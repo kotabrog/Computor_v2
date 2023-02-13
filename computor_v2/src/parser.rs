@@ -56,6 +56,14 @@ impl Parser {
         tokens.len() == 1 && if let Token::String(_) = tokens[0] {true} else {false}
     }
 
+    pub fn is_func_register(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 4
+            && if let Token::String(_) = tokens[0] {true} else {false}
+            && if let Token::LParen = tokens[1] {true} else {false}
+            && if let Token::String(_) = tokens[2] {true} else {false}
+            && if let Token::RParen = tokens[3] {true} else {false}
+    }
+
     pub fn get_string_token_string(token: &Token) -> Result<&String, String> {
         match token {
             Token::String(s) => Ok(s),
@@ -502,6 +510,44 @@ impl Parser {
         }
         Ok(())
     }
+
+    pub fn check_variable_in_tree(tree: &BinaryTree<Element>) -> Result<Option<String>, String> {
+        match tree {
+            BinaryTree::Empty => return Ok(None),
+            BinaryTree::NonEmpty(node_box) => {
+                let left = Self::check_variable_in_tree(tree.left().unwrap())?;
+                let right = Self::check_variable_in_tree(tree.right().unwrap())?;
+                let variable = match (left, right) {
+                    (Some(left_variable), Some(right_variable)) => {
+                        if left_variable != right_variable {
+                            return Err(format!("{}, {}: error two variable", left_variable, right_variable))
+                        }
+                        Some(left_variable)
+                    },
+                    (Some(left_variable), _) => Some(left_variable),
+                    (_, Some(right_variable)) => Some(right_variable),
+                    _ => None
+                };
+                let var = match &node_box.element {
+                    Element::Dummy | Element::Num(_) | Element::Operator(_) => None,
+                    Element::Variable(v) => Some(v),
+                };
+                let variable = match (variable, var) {
+                    (Some(string1), Some(string2)) => {
+                        if **string2 != string1 {
+                            return Err(format!("{}, {}: error two variable", string2, string1))
+                        }
+                        Some(string1)
+                    },
+                    (Some(string1), _) => Some(string1),
+                    (_, Some(string2)) => Some(*string2.clone()),
+                    _ => None,
+                };
+                Ok(variable)
+            }
+        }
+    }
+
 }
 
 
@@ -577,6 +623,38 @@ mod tests {
                 match parser.print_tree(&tree) {
                     Ok(s) => s,
                     Err(e) => format!("error print_tree: {}", e),
+                }
+            }
+            Err(e) => format!("error calculation: {}", e)
+        }
+    }
+
+    fn check_variable_in_tree_test(code: String) -> String {
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => return format!("error lexer: {}", e)
+        };
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree() {
+            Ok(v) => v,
+            Err(e) => return format!("error parser: {}", e)
+        };
+        let mut data_base = DataBase::new();
+        let name = "x".to_string();
+        data_base.register_num(&name, Num::Float(2.0));
+        let name = "y".to_string();
+        data_base.register_num(&name, Num::Float(-2.0));
+        match parser.calculation(&mut tree, &data_base) {
+            Ok(_) => {
+                match Parser::check_variable_in_tree(&tree) {
+                    Ok(s) => {
+                        match s {
+                            Some(v) => v,
+                            None => format!("None"),
+                        }
+                    },
+                    Err(e) => format!("error check_variable: {}", e),
                 }
             }
             Err(e) => format!("error calculation: {}", e)
@@ -1092,5 +1170,17 @@ mod tests {
     fn calculation_and_print_axy() {
         let code = "- 1 + 2 (x + a) ^ 2 * 3 - 2y".to_string();
         assert_eq!(calculation_and_print_test(code), format!("-1 + 2 * ( 2 + a ) ^ 2 * 3 + 4"))
+    }
+
+    #[test]
+    fn check_variable_in_tree_normal() {
+        let code = "- 1 + 2 (x + a) ^ 2 * 3 - 2y".to_string();
+        assert_eq!(check_variable_in_tree_test(code), format!("a"))
+    }
+
+    #[test]
+    fn check_variable_in_tree_small() {
+        let code = "a".to_string();
+        assert_eq!(check_variable_in_tree_test(code), format!("a"))
     }
 }

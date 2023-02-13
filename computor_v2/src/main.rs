@@ -34,6 +34,28 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         let key = Parser::get_string_token_string(&left_vec[0])?;
         data_base.register_num(key, right_value);
         println!("  {}", data_base.get_num(&key).unwrap());
+    } else if Parser::is_func_register(&left_vec) {
+        let mut parser = Parser::new(right_vec);
+        let mut tree = parser.make_tree()?;
+        // println!("{:?}", tree);
+
+        parser.calculation(&mut tree, data_base)?;
+
+        let key = Parser::get_string_token_string(&left_vec[0])?;
+        let variable = Parser::get_string_token_string(&left_vec[2])?;
+        // println!("{}, {}", key, variable);
+
+        match Parser::check_variable_in_tree(&tree)? {
+            Some(var) => {
+                if var != *variable {
+                    return Err(format!("{}, {}: error two variable", var, variable))
+                }
+            },
+            None => {},
+        }
+
+        data_base.register_func(key, tree, variable.clone());
+        println!("  {}", parser.print_tree(&data_base.get_func(key).unwrap().0)?);
     } else if Parser::is_question_tokens(&right_vec){
         let mut parser = Parser::new(left_vec);
         let mut tree = parser.make_tree()?;
