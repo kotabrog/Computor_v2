@@ -2,15 +2,16 @@ use crate::num::Num;
 use crate::binary_tree::{BinaryTree, TreeNode};
 use crate::lexer::Token;
 use crate::operator::Operator;
-use crate::data_base::DataBase;
+use crate::data_base::{DataBase, Data};
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Element {
     Dummy,
     Operator(Operator),
     Num(Num),
     Variable(Box<String>),
+    Func(Box<String>),
 }
 
 pub struct Parser {
@@ -71,18 +72,18 @@ impl Parser {
         }
     }
 
-    pub fn make_tree(&mut self) -> Result<BinaryTree<Element>, String> {
+    pub fn make_tree(&mut self, data_base: &DataBase) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
-        self.root_tree_loop(&mut tree)?;
+        self.root_tree_loop(&mut tree, data_base)?;
         if self.index < self.tokens.len() {
             return Err(format!("syntax error"))
         }
         Ok(tree)
     }
 
-    fn root_tree_loop(&mut self, tree: &mut BinaryTree<Element>) -> Result<(), String> {
+    fn root_tree_loop(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<(), String> {
         while self.index < self.tokens.len() {
-            self.search_add_point(tree)?;
+            self.search_add_point(tree, data_base)?;
             if self.is_r_paren() {
                 break
             }
@@ -90,10 +91,10 @@ impl Parser {
         Ok(())
     }
 
-    fn search_add_point(&mut self, tree: &mut BinaryTree<Element>) -> Result<(), String> {
+    fn search_add_point(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<(), String> {
         match tree {
             BinaryTree::Empty => {
-                self.while_next_token(tree)?;
+                self.while_next_token(tree, data_base)?;
             },
             BinaryTree::NonEmpty(_) => {
                 let token = self.get_next_token()?;
@@ -103,14 +104,14 @@ impl Parser {
                         let operator = Self::token_to_operator(token)?;
                         let tree_op = Self::get_tree_element_operator(tree)?;
                         if tree_op.priority(&operator) {
-                            self.search_add_point(tree.right_mut().unwrap())?;
+                            self.search_add_point(tree.right_mut().unwrap(), data_base)?;
                         } else {
                             Self::replace_and_add_left(tree, operator);
                             if !tree.left().unwrap().is_non_empty() {
                                 return Err(format!("syntax error"))
                             }
                             self.index_plus();
-                            self.while_next_token(tree)?;
+                            self.while_next_token(tree, data_base)?;
                         }
                     },
                     _ => return Err(format!("syntax error")),
@@ -158,16 +159,16 @@ impl Parser {
         self.index += 1;
     }
 
-    fn while_next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+    fn while_next_token(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<bool, String> {
         while self.index < self.tokens.len() {
-            if self.next_token(tree)? {
+            if self.next_token(tree, data_base)? {
                 return Ok(true)
             }
         }
         Ok(false)
     }
 
-    fn next_token(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+    fn next_token(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<bool, String> {
         let token = self.get_next_token()?;
         match token {
             Token::NumString(s) => {
@@ -175,21 +176,32 @@ impl Parser {
                 self.add_num(tree, num)?;
                 self.index_plus();
             },
-            Token::Plus => return self.add_operator(tree, Operator::Plus),
-            Token::Minus => return self.add_operator(tree, Operator::Minus),
-            Token::Asterisk => return self.add_operator(tree, Operator::Mul),
-            Token::Slash => return self.add_operator(tree, Operator::Div),
-            Token::Percent => return self.add_operator(tree, Operator::Rem),
-            Token::Caret => return self.add_operator(tree, Operator::Pow),
-            Token::LParen => return self.add_paren(tree),
+            Token::Plus => return self.add_operator(tree, Operator::Plus, data_base),
+            Token::Minus => return self.add_operator(tree, Operator::Minus, data_base),
+            Token::Asterisk => return self.add_operator(tree, Operator::Mul, data_base),
+            Token::Slash => return self.add_operator(tree, Operator::Div, data_base),
+            Token::Percent => return self.add_operator(tree, Operator::Rem, data_base),
+            Token::Caret => return self.add_operator(tree, Operator::Pow, data_base),
+            Token::LParen => return self.add_paren(tree, data_base),
             Token::RParen => return Ok(true),
             Token::String(s) => {
                 let string_box = s.clone();
-                return self.add_variable(tree, string_box)
+                if Self::is_function(&string_box, data_base) {
+                    return self.add_function(tree, string_box, data_base)
+                } else {
+                    return self.add_variable(tree, string_box)
+                }
             },
             _ => return Err(format!("{:?}: wip", token))
         }
         Ok(false)
+    }
+
+    fn is_function(string_box: &Box<String>, data_base: &DataBase) -> bool {
+        match data_base.get_func(&string_box) {
+            Some(_) => true,
+            None => false,
+        }
     }
 
     fn string_to_num(string: &String) -> Result<Num, String> {
@@ -203,7 +215,7 @@ impl Parser {
             BinaryTree::Empty => tree,
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) | Element::Dummy | Element::Variable(_)
+                    Element::Num(_) | Element::Dummy | Element::Variable(_) | Element::Func(_)
                         => return Err(format!("{:?}: syntax error", num)),
                     _ => {},
                 }
@@ -224,7 +236,7 @@ impl Parser {
         Ok(())
     }
 
-    fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator) -> Result<bool, String> {
+    fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator, data_base: &DataBase) -> Result<bool, String> {
         match &tree {
             BinaryTree::Empty => {
                 match operator {
@@ -238,7 +250,7 @@ impl Parser {
             }
             BinaryTree::NonEmpty(node_box) => {
                 match &node_box.element {
-                    Element::Num(_) | Element::Variable(_) => {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
                         Self::replace_and_add_left(tree, operator);
                         self.index_plus();
                     },
@@ -247,7 +259,7 @@ impl Parser {
                             return Err(format!("syntax error"))
                         }
                         if tree_op.priority(&operator) {
-                            return self.while_next_token(tree.right_mut().unwrap())
+                            return self.while_next_token(tree.right_mut().unwrap(), data_base)
                         } else {
                             return Ok(true);
                         }
@@ -259,17 +271,17 @@ impl Parser {
         Ok(false)
     }
 
-    fn add_paren(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+    fn add_paren(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<bool, String> {
         let paren_tree = match tree {
             BinaryTree::Empty => {
                 *tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
                 self.index_plus();
-                self.root_tree_loop(tree.left_mut().unwrap())?;
+                self.root_tree_loop(tree.left_mut().unwrap(), data_base)?;
                 tree
             },
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) | Element::Variable(_) => {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_)=> {
                         self.insert_mul();
                         return Ok(false)
                     }
@@ -284,7 +296,7 @@ impl Parser {
                 let right_tree = tree.right_mut().unwrap();
                 *right_tree = BinaryTree::from_element(Element::Operator(Operator::Paren));
                 self.index_plus();
-                self.root_tree_loop(right_tree.left_mut().unwrap())?;
+                self.root_tree_loop(right_tree.left_mut().unwrap(), data_base)?;
                 right_tree
             }
         };
@@ -308,7 +320,7 @@ impl Parser {
             BinaryTree::Empty => tree,
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
-                    Element::Num(_) | Element::Variable(_) => {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
                         self.insert_mul();
                         return Ok(false)
                     }
@@ -331,6 +343,37 @@ impl Parser {
         Ok(false)
     }
 
+    fn add_function(&mut self, tree: &mut BinaryTree<Element>, string_box: Box<String>, data_base: &DataBase) -> Result<bool, String> {
+        let next_tree = match tree {
+            BinaryTree::Empty => tree,
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
+                        self.insert_mul();
+                        return Ok(false)
+                    }
+                    Element::Dummy => return Err(format!("{}: syntax error", string_box)),
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            self.insert_mul();
+                            return Ok(false)
+                        }
+                    },
+                }
+                tree.right_mut().unwrap()
+            }
+        };
+        *next_tree = BinaryTree::from_element(Element::Func(string_box.clone()));
+        self.index_plus();
+        if !self.is_l_paren() {
+            return Err(format!("{}: func is defined as a function, so it needs parentheses", string_box))
+        }
+        let mut paren_tree = next_tree.left_mut().unwrap();
+        self.add_paren(&mut paren_tree, data_base)?;
+        *next_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
+        Ok(false)
+    }
+
     fn insert_mul(&mut self) {
         self.tokens.insert(self.index, Token::Asterisk)
     }
@@ -347,6 +390,18 @@ impl Parser {
             Ok(token) => {
                 match token {
                     Token::RParen => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
+    }
+
+    fn is_l_paren(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::LParen => true,
                     _ => false,
                 }
             },
@@ -378,7 +433,7 @@ impl Parser {
         }
     }
 
-    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<Option<Num>, String> {
+    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, &Num)>) -> Result<Option<Num>, String> {
         match &tree {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
@@ -389,12 +444,38 @@ impl Parser {
                     },
                     Element::Num(n) => return Ok(Some(n.clone())),
                     Element::Dummy => return Ok(Some(Num::Float(0.0))),
-                    Element::Variable(v) => {
-                        match data_base.get_num(v) {
+                    Element::Variable(string_box) => {
+                        if let Some((key, num)) = local_variable {
+                            if *key == **string_box {
+                                return Ok(Some(num.clone()))
+                            }
+                        }
+                        match data_base.get_num(string_box) {
                             None => return Ok(None),
-                            Some(n) => {
-                                *tree = BinaryTree::from_element(Element::Num(n.clone()));
-                                return Ok(Some(n.clone()))
+                            Some(num) => {
+                                *tree = BinaryTree::from_element(Element::Num(num.clone()));
+                                return Ok(Some(num.clone()))
+                            }
+                        }
+                    },
+                    Element::Func(string_box) => {
+                        match data_base.get_func(string_box) {
+                            None => return Ok(None),
+                            Some(b) => {
+                                let mut func_tree = b.0.clone();
+                                let variable = b.1.clone();
+                                let func_name = string_box.clone();
+                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
+                                        None => return Err(format!("{}: error: Could not expand function contents", func_name)),
+                                        Some(num) => num,
+                                };
+                                match self.calculation(&mut func_tree, data_base, Some((&variable, &left_value)))? {
+                                    None => return Err(format!("{}: function error", func_name)),
+                                    Some(num) => {
+                                        *tree = BinaryTree::from_element(Element::Num(num.clone()));
+                                        return Ok(Some(num))
+                                    },
+                                }
                             }
                         }
                     }
@@ -407,9 +488,9 @@ impl Parser {
                     _ => return Err(format!("syntax error")),
                 };
                 let left_value_option =
-                    self.calculation(tree.left_mut().unwrap(), data_base)?;
+                    self.calculation(tree.left_mut().unwrap(), data_base, local_variable)?;
                 let right_value_option =
-                    self.calculation(tree.right_mut().unwrap(), data_base)?;
+                    self.calculation(tree.right_mut().unwrap(), data_base, local_variable)?;
                 let value = match (left_value_option, right_value_option) {
                     (Some(left_value), Some(right_value)) => {
                         match op {
@@ -505,6 +586,14 @@ impl Parser {
                     Element::Num(n) => *expr += format!("{} ", n).as_str(),
                     Element::Dummy => {},
                     Element::Variable(v) => *expr += format!("{} ", v).as_str(),
+                    Element::Func(f) => {
+                        *expr += format!("{} ", f).as_str();
+                        let left_tree = tree.left().unwrap();
+                        match left_tree {
+                            BinaryTree::NonEmpty(_) => Self::print_tree_loop(left_tree, expr)?,
+                            _ => return Err(format!("syntax error")),
+                        }
+                    },
                 }
             },
         }
@@ -531,6 +620,7 @@ impl Parser {
                 let var = match &node_box.element {
                     Element::Dummy | Element::Num(_) | Element::Operator(_) => None,
                     Element::Variable(v) => Some(v),
+                    Element::Func(v) => return Err(format!("{}: error function", v))
                 };
                 let variable = match (variable, var) {
                     (Some(string1), Some(string2)) => {
@@ -562,17 +652,17 @@ mod tests {
             Ok(v) => v,
             Err(e) => return Err(format!("error lexer: {}", e))
         };
-        let mut parser = Parser::new(vec);
-        let mut tree = match parser.make_tree() {
-            Ok(v) => v,
-            Err(e) => return Err(format!("error parser: {}", e))
-        };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
-        match parser.calculation(&mut tree, &data_base) {
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree(&data_base) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("error parser: {}", e))
+        };
+        match parser.calculation(&mut tree, &data_base, None) {
             Ok(v) => {
                 match v {
                     Some(v) => Ok(v),
@@ -589,8 +679,9 @@ mod tests {
             Ok(v) => v,
             Err(e) => return format!("error lexer: {}", e)
         };
+        let data_base = DataBase::new();
         let mut parser = Parser::new(vec);
-        match parser.make_tree() {
+        match parser.make_tree(&data_base) {
             Ok(v) => {
                 let tree = v;
                 match parser.print_tree(&tree) {
@@ -608,17 +699,17 @@ mod tests {
             Ok(v) => v,
             Err(e) => return format!("error lexer: {}", e)
         };
-        let mut parser = Parser::new(vec);
-        let mut tree = match parser.make_tree() {
-            Ok(v) => v,
-            Err(e) => return format!("error parser: {}", e)
-        };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
-        match parser.calculation(&mut tree, &data_base) {
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree(&data_base) {
+            Ok(v) => v,
+            Err(e) => return format!("error parser: {}", e)
+        };
+        match parser.calculation(&mut tree, &data_base, None) {
             Ok(_) => {
                 match parser.print_tree(&tree) {
                     Ok(s) => s,
@@ -635,17 +726,17 @@ mod tests {
             Ok(v) => v,
             Err(e) => return format!("error lexer: {}", e)
         };
-        let mut parser = Parser::new(vec);
-        let mut tree = match parser.make_tree() {
-            Ok(v) => v,
-            Err(e) => return format!("error parser: {}", e)
-        };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
-        match parser.calculation(&mut tree, &data_base) {
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree(&data_base) {
+            Ok(v) => v,
+            Err(e) => return format!("error parser: {}", e)
+        };
+        match parser.calculation(&mut tree, &data_base, None) {
             Ok(_) => {
                 match Parser::check_variable_in_tree(&tree) {
                     Ok(s) => {

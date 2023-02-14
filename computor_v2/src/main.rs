@@ -19,12 +19,25 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
 
     let (left_vec, right_vec) = Parser::separate_equal(vec)?;
 
-    if Parser::is_variable_register(&left_vec) {
-        let mut parser = Parser::new(right_vec);
-        let mut tree = parser.make_tree()?;
+    if Parser::is_question_tokens(&right_vec) {
+        let mut parser = Parser::new(left_vec);
+        let mut tree = parser.make_tree(data_base)?;
         // println!("{:?}", tree);
 
-        let right_value = parser.calculation(&mut tree, data_base)?;
+        let left_value = parser.calculation(&mut tree, data_base, None)?;
+        let left_value = match left_value {
+            Some(v) => v,
+            None => return Err(format!("Undefined Variables")),
+        };
+        // println!("{:?}", left_value);
+
+        println!("  {}", left_value);
+    } else if Parser::is_variable_register(&left_vec) {
+        let mut parser = Parser::new(right_vec);
+        let mut tree = parser.make_tree(data_base)?;
+        // println!("{:?}", tree);
+
+        let right_value = parser.calculation(&mut tree, data_base, None)?;
         let right_value = match right_value {
             Some(v) => v,
             None => return Err(format!("Undefined Variables")),
@@ -36,10 +49,10 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         println!("  {}", data_base.get_num(&key).unwrap());
     } else if Parser::is_func_register(&left_vec) {
         let mut parser = Parser::new(right_vec);
-        let mut tree = parser.make_tree()?;
+        let mut tree = parser.make_tree(data_base)?;
         // println!("{:?}", tree);
 
-        parser.calculation(&mut tree, data_base)?;
+        parser.calculation(&mut tree, data_base, None)?;
 
         let key = Parser::get_string_token_string(&left_vec[0])?;
         let variable = Parser::get_string_token_string(&left_vec[2])?;
@@ -56,19 +69,6 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
 
         data_base.register_func(key, tree, variable.clone());
         println!("  {}", parser.print_tree(&data_base.get_func(key).unwrap().0)?);
-    } else if Parser::is_question_tokens(&right_vec){
-        let mut parser = Parser::new(left_vec);
-        let mut tree = parser.make_tree()?;
-        // println!("{:?}", tree);
-
-        let left_value = parser.calculation(&mut tree, data_base)?;
-        let left_value = match left_value {
-            Some(v) => v,
-            None => return Err(format!("Undefined Variables")),
-        };
-        // println!("{:?}", left_value);
-
-        println!("  {}", left_value);
     } else {
         println!("  {}", "Unsupported format");
     }
