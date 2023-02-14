@@ -366,7 +366,7 @@ impl Parser {
         *next_tree = BinaryTree::from_element(Element::Func(string_box.clone()));
         self.index_plus();
         if !self.is_l_paren() {
-            return Err(format!("{}: func is defined as a function, so it needs parentheses", string_box))
+            return Err(format!("error: {} is defined as a function, so it needs parentheses", string_box))
         }
         let mut paren_tree = next_tree.left_mut().unwrap();
         self.add_paren(&mut paren_tree, data_base)?;
@@ -1340,5 +1340,86 @@ mod tests {
         let variable = "x".to_string();
         let code = "func(1)".to_string();
         assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(2.0)))
+    }
+
+    #[test]
+    fn calculation_function_constant() {
+        let function = "-1".to_string();
+        let function_name = "func".to_string();
+        let variable = "a".to_string();
+        let code = "func(1)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(-1.0)))
+    }
+
+    #[test]
+    fn calculation_function_long_function() {
+        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(2)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(14.0)))
+    }
+
+    #[test]
+    fn calculation_function_in_same_variable() {
+        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(x * 2 - 2)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(14.0)))
+    }
+
+    #[test]
+    fn calculation_function_in_long() {
+        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func((x + 2)^2 - 2 * x - 2 + (-2)^x - 12)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(14.0)))
+    }
+
+    #[test]
+    fn calculation_function_and_long() {
+        let function = "x + 1".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "3 func(x) x - 2func(y)^3".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(20.0)))
+    }
+
+    #[test]
+    fn calculation_function_overwrite_variable() {
+        let function = "x + 1".to_string();
+        let function_name = "x".to_string();
+        let variable = "x".to_string();
+        let code = "x(-2)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(-1.0)))
+    }
+
+    #[test]
+    fn calculation_error_function_not_calc() {
+        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(a)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation: func: error: Could not expand function contents".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_function_not_func() {
+        let function = "1 - x".to_string();
+        let function_name = "f".to_string();
+        let variable = "x".to_string();
+        let code = "func(1)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_function_not_paren() {
+        let function = "1 - x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error parser: error: func is defined as a function, so it needs parentheses".to_string()))
     }
 }
