@@ -433,7 +433,7 @@ impl Parser {
         }
     }
 
-    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, &Num)>) -> Result<Option<Num>, String> {
+    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, Option<&Num>)>) -> Result<Option<Num>, String> {
         match &tree {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
@@ -447,7 +447,10 @@ impl Parser {
                     Element::Variable(string_box) => {
                         if let Some((key, num)) = local_variable {
                             if *key == **string_box {
-                                return Ok(Some(num.clone()))
+                                match num {
+                                    Some(n) => return Ok(Some(n.clone())),
+                                    None => return Ok(None)
+                                }
                             }
                         }
                         match data_base.get_num(string_box) {
@@ -469,7 +472,7 @@ impl Parser {
                                         None => return Err(format!("{}: error: Could not expand function contents", func_name)),
                                         Some(num) => num,
                                 };
-                                match self.calculation(&mut func_tree, data_base, Some((&variable, &left_value)))? {
+                                match self.calculation(&mut func_tree, data_base, Some((&variable, Some(&left_value))))? {
                                     None => return Err(format!("{}: function error", func_name)),
                                     Some(num) => {
                                         *tree = BinaryTree::from_element(Element::Num(num.clone()));
@@ -751,6 +754,52 @@ mod tests {
             Err(e) => format!("error calculation: {}", e)
         }
     }
+
+    
+    fn function_calculation_test(function: String, function_name: String, variable: String, code: String) -> Result<Num, String> {
+        let mut data_base = DataBase::new();
+        let name = "x".to_string();
+        data_base.register_num(&name, Num::Float(2.0));
+        let name = "y".to_string();
+        data_base.register_num(&name, Num::Float(-2.0));
+
+        let mut lexer = Lexer::new(&function);
+        let vec = lexer.make_token_vec()?;
+        let mut parser = Parser::new(vec);
+        let mut tree = parser.make_tree(&data_base)?;
+        parser.calculation(&mut tree, &data_base, Some((&variable, None)))?;
+
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => return Err(format!("error lexer: {}", e))
+        };
+        match Parser::check_variable_in_tree(&tree)? {
+            Some(var) => {
+                if var != *variable {
+                    return Err(format!("{}, {}: error two variable", var, variable))
+                }
+            },
+            None => {},
+        }
+        data_base.register_func(&function_name, tree, variable.clone());
+
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree(&data_base) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("error parser: {}", e))
+        };
+        match parser.calculation(&mut tree, &data_base, None) {
+            Ok(v) => {
+                match v {
+                    Some(v) => Ok(v),
+                    None => Err(format!("error calculation"))
+                }
+            },
+            Err(e) => Err(format!("error calculation: {}", e))
+        }
+    }
+
 
     #[test]
     fn calculation_simple_float_add() {
@@ -1273,5 +1322,23 @@ mod tests {
     fn check_variable_in_tree_small() {
         let code = "a".to_string();
         assert_eq!(check_variable_in_tree_test(code), format!("a"))
+    }
+
+    #[test]
+    fn calculation_function_normal() {
+        let function = "a + 1".to_string();
+        let function_name = "func".to_string();
+        let variable = "a".to_string();
+        let code = "func(1)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(2.0)))
+    }
+
+    #[test]
+    fn calculation_function_registered_variable() {
+        let function = "x + 1".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(1)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(2.0)))
     }
 }

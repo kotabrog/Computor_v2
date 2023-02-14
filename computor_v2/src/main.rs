@@ -48,15 +48,15 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         data_base.register_num(key, right_value);
         println!("  {}", data_base.get_num(&key).unwrap());
     } else if Parser::is_func_register(&left_vec) {
+        let key = Parser::get_string_token_string(&left_vec[0])?;
+        let variable = Parser::get_string_token_string(&left_vec[2])?;
+        // println!("{}, {}", key, variable);
+
         let mut parser = Parser::new(right_vec);
         let mut tree = parser.make_tree(data_base)?;
         // println!("{:?}", tree);
 
-        parser.calculation(&mut tree, data_base, None)?;
-
-        let key = Parser::get_string_token_string(&left_vec[0])?;
-        let variable = Parser::get_string_token_string(&left_vec[2])?;
-        // println!("{}, {}", key, variable);
+        parser.calculation(&mut tree, data_base, Some((variable, None)))?;
 
         match Parser::check_variable_in_tree(&tree)? {
             Some(var) => {

@@ -45,7 +45,7 @@ impl DataBase {
         };
         match data {
             Data::Num(n) => Some(n),
-            Data::Func(f) => None,
+            Data::Func(_) => None,
         }
     }
 
@@ -55,7 +55,7 @@ impl DataBase {
             None => return None,
         };
         match data {
-            Data::Num(n) => None,
+            Data::Num(_) => None,
             Data::Func(f) => Some(f),
         }
     }
