@@ -7,7 +7,7 @@ mod parser;
 mod data_base;
 mod operator;
 
-use lexer::{Lexer, Token};
+use lexer::Lexer;
 use parser::Parser;
 use data_base::DataBase;
 

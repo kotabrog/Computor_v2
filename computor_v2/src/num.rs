@@ -2,8 +2,50 @@ use std::fmt;
 
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Complex {
+    r: f64,
+    z: f64,
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Num {
     Float(f64),
+    Complex(Box<Complex>)
+}
+
+
+impl Complex {
+    fn from_two_float(r: f64, z: f64) -> Complex {
+        Complex { r, z }
+    }
+
+    fn new() -> Complex {
+        Self::from_two_float(0.0, 1.0)
+    }
+
+    fn is_float(&self) -> bool {
+        self.z == 0.0
+    }
+
+    fn to_float(&self) -> Option<f64> {
+        if self.is_float() {
+            Some(self.r)
+        } else {
+            None
+        }
+    }
+}
+
+
+impl fmt::Display for Complex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.z.is_sign_positive() {
+            write!(f, "{} + {}i", self.r, self.z)
+        } else {
+            write!(f, "{} - {}i", self.r, self.z * -1.0)
+        }
+    }
 }
 
 
@@ -18,50 +60,105 @@ impl Num {
     }
 
 
+    pub fn from_two_float(r: f64, z: f64) -> Num {
+        if z == 0.0 {
+            Num::Float(r)
+        } else {
+            Self::from_two_float_to_complex(r, z)
+        }
+    }
+
+
+    pub fn from_two_float_to_complex(r: f64, z: f64) -> Num {
+        Num::Complex(Box::new(Complex::from_two_float(r, z)))
+    }
+
+
+    pub fn new_complex() -> Num {
+        Self::from_two_float_to_complex(0.0, 1.0)
+    }
+
+
     pub fn checked_value(&self) -> Result<&Num, String> {
         match self {
             Num::Float(n) => {
                 if n.is_finite() {
-                    return Ok(&self)
+                    Ok(&self)
                 } else {
                     Err(format!("The calculation resulted in '{}'.", n))
                 }
-            }
+            },
+            Num::Complex(b) => {
+                if !b.r.is_finite() {
+                    Err(format!("The calculation resulted in '{}'.", b.r))
+                }
+                else if !b.z.is_finite() {
+                    Err(format!("The calculation resulted in '{}'.", b.z))
+                } else {
+                    Ok(&self)
+                }
+            },
         }
     }
 
 
     pub fn supported_add(&self, rhs: &Num) -> Result<Num, String> {
         match (self, rhs) {
-            (Num::Float(l), Num::Float(r)) => {
-                Ok(Num::Float(l + r))
-            },
+            (Num::Float(l), Num::Float(r))
+                => Ok(Num::Float(l + r)),
+            (Num::Float(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l + r.r, r.z)),
+            (Num::Complex(l), Num::Float(r))
+                => Ok(Num::from_two_float(l.r + r, l.z)),
+            (Num::Complex(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l.r + r.r, l.z + r.z)),
         }
     }
 
 
     pub fn supported_sub(&self, rhs: &Num) -> Result<Num, String> {
         match (self, rhs) {
-            (Num::Float(l), Num::Float(r)) => {
-                Ok(Num::Float(l - r))
-            },
+            (Num::Float(l), Num::Float(r))
+                => Ok(Num::Float(l - r)),
+            (Num::Float(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l - r.r, -r.z)),
+            (Num::Complex(l), Num::Float(r))
+                => Ok(Num::from_two_float(l.r - r, l.z)),
+            (Num::Complex(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l.r - r.r, l.z - r.z)),
         }
     }
 
 
     pub fn supported_mul(&self, rhs: &Num) -> Result<Num, String> {
         match (self, rhs) {
-            (Num::Float(l), Num::Float(r)) => {
-                Ok(Num::Float(l * r))
-            },
+            (Num::Float(l), Num::Float(r))
+                =>Ok(Num::Float(l * r)),
+            (Num::Float(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l * r.r, l * r.z)),
+            (Num::Complex(l), Num::Float(r))
+                => Ok(Num::from_two_float(l.r * r, l.z * r)),
+            (Num::Complex(l), Num::Complex(r))
+                => Ok(Num::from_two_float(l.r * r.r - l.z * r.z, l.r * r.z + l.z * r.r)),
         }
     }
 
 
     pub fn supported_div(&self, rhs: &Num) -> Result<Num, String> {
         match (self, rhs) {
-            (Num::Float(l), Num::Float(r)) => {
-                Ok(Num::Float(l / r))
+            (Num::Float(l), Num::Float(r))
+                => Ok(Num::Float(l / r)),
+            (Num::Float(l), Num::Complex(r)) => {
+                let v = r.r * r.r + r.z * r.z;
+                Ok(Num::from_two_float(l * r.r / v, - l * r.z / v))
+            },
+            (Num::Complex(l), Num::Float(r))
+                => Ok(Num::from_two_float(l.r / r, l.z / r)),
+            (Num::Complex(_), Num::Complex(r)) => {
+                let v = r.r * r.r + r.z * r.z;
+                let r2 = Num::from_two_float(r.r, -r.z);
+                Ok(self.supported_mul(&r2).unwrap()
+                        .supported_div(&Num::Float(v)).unwrap())
             },
         }
     }
@@ -69,9 +166,11 @@ impl Num {
 
     pub fn supported_rem(&self, rhs: &Num) -> Result<Num, String> {
         match (self, rhs) {
-            (Num::Float(l), Num::Float(r)) => {
-                Ok(Num::Float(l.rem_euclid(*r)))
-            },
+            (Num::Float(l), Num::Float(r))
+                => Ok(Num::Float(l.rem_euclid(*r))),
+            (Num::Complex(l), Num::Float(r))
+                => Ok(Num::from_two_float(l.r % r, l.z % r)),
+            _ => Err(format!("Unsupported operator {} % {}", self, rhs))
         }
     }
 
@@ -81,6 +180,7 @@ impl Num {
             (Num::Float(l), Num::Float(r)) => {
                 Ok(Num::Float(l.powf(*r)))
             },
+            _ => Err(format!("Unsupported operator {} % {}", self, rhs))
         }
     }
 
@@ -97,7 +197,8 @@ impl Num {
 impl fmt::Display for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Num::Float(n) => write!(f, "{}", n)
+            Num::Float(n) => write!(f, "{}", n),
+            Num::Complex(n) =>  write!(f, "{}", n),
         }
     }
 }

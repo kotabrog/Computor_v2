@@ -1,8 +1,8 @@
 use crate::num::Num;
-use crate::binary_tree::{BinaryTree, TreeNode};
+use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
 use crate::operator::Operator;
-use crate::data_base::{DataBase, Data};
+use crate::data_base::DataBase;
 
 
 #[derive(Debug, PartialEq, Clone)]
