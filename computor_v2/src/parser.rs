@@ -25,6 +25,20 @@ impl Parser {
         Parser { tokens, index: 0 }
     }
 
+    pub fn is_show_variable(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
+            Ok(s) => s == "variables",
+            Err(_) => false
+        }
+    }
+
+    pub fn is_show_functions(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
+            Ok(s) => s == "functions",
+            Err(_) => false
+        }
+    }
+
     pub fn separate_equal(tokens: Vec<Token>) -> Result<(Vec<Token>, Vec<Token>), String> {
         let mut left_vec = Vec::new();
         let mut right_vec = Vec::new();
@@ -176,6 +190,7 @@ impl Parser {
                 self.add_num(tree, num)?;
                 self.index_plus();
             },
+            Token::I => return self.add_complex(tree),
             Token::Plus => return self.add_operator(tree, Operator::Plus, data_base),
             Token::Minus => return self.add_operator(tree, Operator::Minus, data_base),
             Token::Asterisk => return self.add_operator(tree, Operator::Mul, data_base),
@@ -234,6 +249,34 @@ impl Parser {
         };
         *next_tree = BinaryTree::from_element(Element::Num(num));
         Ok(())
+    }
+
+    fn add_complex(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        let next_tree = match tree {
+            BinaryTree::Empty => tree,
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
+                        self.insert_mul();
+                        return Ok(false)
+                    }
+                    Element::Dummy => return Err(format!("i: syntax error")),
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            self.insert_mul();
+                            return Ok(false)
+                        }
+                    },
+                }
+                tree.right_mut().unwrap()
+            }
+        };
+        *next_tree = BinaryTree::from_element(Element::Num(Num::new_complex()));
+        self.index_plus();
+        if self.is_num() || self.is_string_token() {
+            self.insert_mul();
+        }
+        Ok(false)
     }
 
     fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator, data_base: &DataBase) -> Result<bool, String> {
@@ -508,11 +551,11 @@ impl Parser {
                         }
                     },
                     (None, Some(right_value)) => {
-                        Self::add_paren_to_negative_value(tree, &right_value, &op, true)?;
+                        Self::check_and_add_paren_to_value(tree, &right_value, &op, true)?;
                         return Ok(None)
                     },
                     (Some(left_value), None) => {
-                        Self::add_paren_to_negative_value(tree, &left_value, &op, false)?;
+                        Self::check_and_add_paren_to_value(tree, &left_value, &op, false)?;
                         return Ok(None)
                     },
                     _ => return Ok(None)
@@ -524,36 +567,47 @@ impl Parser {
         }
     }
 
-    fn add_paren_to_negative_value(tree: &mut BinaryTree<Element>, value: &Num, op: &Operator, right: bool) -> Result<(), String> {
-        if value.is_negative() {
-            match op {
-                Operator::Minus | Operator::Plus => {
-                    if right {
-                        let num = Num::Float(-1.0);
-                        let num = value.supported_mul(&num).unwrap();
-                        *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num));
-                        if let Operator::Minus = op {
-                            tree.set_element(Element::Operator(Operator::Plus));
-                        } else {
-                            tree.set_element(Element::Operator(Operator::Minus));
+    fn check_and_add_paren_to_value(tree: &mut BinaryTree<Element>, value: &Num, op: &Operator, right: bool) -> Result<(), String> {
+        if !value.is_need_paren_to_display() {
+            return Ok(())
+        }
+        match op {
+            Operator::Minus | Operator::Plus => {
+                if right && value.is_need_sign_reverse() {
+                    let num = value.reverse_sign();
+                    *tree.right_mut().unwrap() = BinaryTree::from_element(Element::Num(num.clone()));
+                    if let Operator::Minus = op {
+                        tree.set_element(Element::Operator(Operator::Plus));
+                    } else {
+                        tree.set_element(Element::Operator(Operator::Minus));
+                        match &num {
+                            Num::Complex(n) => {
+                                if n.z != 0.0 {
+                                    Self::add_paren_to_value(tree, &num, right);
+                                }
+                            },
+                            Num::Float(_) => {}
                         }
                     }
-                },
-                Operator::Mul | Operator::Div | Operator::Rem | Operator::Pow | Operator::MatrixMul => {
-                    let tmp_tree = if right {tree.right_mut().unwrap()} else {tree.left_mut().unwrap()};
-                    *tmp_tree = BinaryTree::from_element_and_tree(
-                        Element::Operator(Operator::Paren),
-                        BinaryTree::from_element(Element::Num(value.clone())),
-                        BinaryTree::from_element(Element::Operator(Operator::RParen)),
-                    )
                 }
-                Operator::Paren | Operator::RParen => return Err(format!("syntax error"))
-            }
+            },
+            Operator::Mul | Operator::Div | Operator::Rem | Operator::Pow | Operator::MatrixMul
+                => Self::add_paren_to_value(tree, value, right),
+            Operator::Paren | Operator::RParen => return Err(format!("syntax error"))
         }
         Ok(())
     }
 
-    pub fn print_tree(&self, tree: &BinaryTree<Element>) -> Result<String, String> {
+    fn add_paren_to_value(tree: &mut BinaryTree<Element>, value: &Num, right: bool) {
+        let tmp_tree = if right {tree.right_mut().unwrap()} else {tree.left_mut().unwrap()};
+        *tmp_tree = BinaryTree::from_element_and_tree(
+            Element::Operator(Operator::Paren),
+            BinaryTree::from_element(Element::Num(value.clone())),
+            BinaryTree::from_element(Element::Operator(Operator::RParen)),
+        );
+    }
+
+    pub fn print_tree(tree: &BinaryTree<Element>) -> Result<String, String> {
         let mut expr = String::new();
         Self::print_tree_loop(tree, &mut expr)?;
         expr.pop();
@@ -660,6 +714,8 @@ mod tests {
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
+        let name = "z".to_string();
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -687,7 +743,7 @@ mod tests {
         match parser.make_tree(&data_base) {
             Ok(v) => {
                 let tree = v;
-                match parser.print_tree(&tree) {
+                match Parser::print_tree(&tree) {
                     Ok(s) => s,
                     Err(e) => format!("error print_tree: {}", e),
                 }
@@ -707,6 +763,8 @@ mod tests {
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
+        let name = "z".to_string();
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -714,7 +772,7 @@ mod tests {
         };
         match parser.calculation(&mut tree, &data_base, None) {
             Ok(_) => {
-                match parser.print_tree(&tree) {
+                match Parser::print_tree(&tree) {
                     Ok(s) => s,
                     Err(e) => format!("error print_tree: {}", e),
                 }
@@ -734,6 +792,8 @@ mod tests {
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
+        let name = "z".to_string();
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -762,6 +822,8 @@ mod tests {
         data_base.register_num(&name, Num::Float(2.0));
         let name = "y".to_string();
         data_base.register_num(&name, Num::Float(-2.0));
+        let name = "z".to_string();
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
 
         let mut lexer = Lexer::new(&function);
         let vec = lexer.make_token_vec()?;
@@ -1072,6 +1134,18 @@ mod tests {
     }
 
     #[test]
+    fn calculation_complex_long() {
+        let code = "i + 2 * 3 - 8 / 2i % 3 + 2 ^ 3 * i * 2".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::from_two_float(6.0, 16.0)))
+    }
+
+    #[test]
+    fn calculation_error_complex_rem() {
+        let code = "3 % i".to_string();
+        assert_eq!(calculation_test(code), Err("error calculation: Unsupported operator (3) % (i)".to_string()))
+    }
+
+    #[test]
     fn calculation_error_double_op() {
         let code = "1 + + 2".to_string();
         assert_eq!(calculation_test(code), Err("error parser: syntax error".to_string()))
@@ -1154,7 +1228,7 @@ mod tests {
         let code = "2 + (3 - 1)3 + 5".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(13.0)))
     }
-    
+
     #[test]
     fn calculation_paren_right_no_mul_pow() {
         let code = "2 + (3 - 1) 2 ^ 3 + 5".to_string();
@@ -1166,6 +1240,12 @@ mod tests {
     fn calculation_paren_priority_long() {
         let code = "1 - 2 ^ (2 + 1) * 3 + 2 * 3".to_string();
         assert_eq!(calculation_test(code), Ok(Num::Float(-17.0)))
+    }
+
+    #[test]
+    fn calculation_paren_complex_long() {
+        let code = "1 - 2 ^ (2 + 1) * i + i * 3".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::from_two_float(1.0, -5.0)))
     }
 
     #[test]
@@ -1271,6 +1351,12 @@ mod tests {
     }
 
     #[test]
+    fn print_tree_complex_long() {
+        let code = "- 1 + 2i (x + y) ^ 2 * 3 - 2i x + 3x".to_string();
+        assert_eq!(parse_and_print_test(code), format!("- 1 + 2 * i * ( x + y ) ^ 2 * 3 - 2 * i * x + 3 * x"))
+    }
+
+    #[test]
     fn calculation_and_print_num() {
         let code = "- 1 + 2 (x + y) ^ 2 * 3 - 2x".to_string();
         assert_eq!(calculation_and_print_test(code), format!("-5"))
@@ -1289,9 +1375,21 @@ mod tests {
     }
 
     #[test]
+    fn calculation_and_print_minus_complex() {
+        let code = "a - z".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a + 1 + 3i"))
+    }
+
+    #[test]
     fn calculation_and_print_plus_minus() {
         let code = "a + y".to_string();
         assert_eq!(calculation_and_print_test(code), format!("a - 2"))
+    }
+
+    #[test]
+    fn calculation_and_print_plus_complex() {
+        let code = "a + z".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a - ( 1 + 3i )"))
     }
 
     #[test]
@@ -1301,9 +1399,21 @@ mod tests {
     }
 
     #[test]
+    fn calculation_and_print_mul_complex() {
+        let code = "a * z".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("a * ( -1 - 3i )"))
+    }
+
+    #[test]
     fn calculation_and_print_minus_mul() {
         let code = "y ^ a".to_string();
         assert_eq!(calculation_and_print_test(code), format!("( -2 ) ^ a"))
+    }
+
+    #[test]
+    fn calculation_and_print_pow_complex() {
+        let code = "z ^ a".to_string();
+        assert_eq!(calculation_and_print_test(code), format!("( -1 - 3i ) ^ a"))
     }
 
     #[test]
@@ -1315,6 +1425,12 @@ mod tests {
     #[test]
     fn check_variable_in_tree_normal() {
         let code = "- 1 + 2 (x + a) ^ 2 * 3 - 2y".to_string();
+        assert_eq!(check_variable_in_tree_test(code), format!("a"))
+    }
+
+    #[test]
+    fn check_variable_in_tree_complex() {
+        let code = "- 1 + 2 (x + a) ^ 2 * 3i - 2y".to_string();
         assert_eq!(check_variable_in_tree_test(code), format!("a"))
     }
 
@@ -1331,6 +1447,15 @@ mod tests {
         let variable = "a".to_string();
         let code = "func(1)".to_string();
         assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(2.0)))
+    }
+
+    #[test]
+    fn calculation_function_complex() {
+        let function = "a + i".to_string();
+        let function_name = "func".to_string();
+        let variable = "a".to_string();
+        let code = "func(2 + i)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::from_two_float(2.0, 2.0)))
     }
 
     #[test]
@@ -1421,5 +1546,14 @@ mod tests {
         let variable = "x".to_string();
         let code = "func".to_string();
         assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error parser: error: func is defined as a function, so it needs parentheses".to_string()))
+    }
+
+    #[test]
+    fn calculation_error_function_unsupported_op_complex() {
+        let function = "1 - i ^ x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(2)".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation: Unsupported operator (i) ^ (2)".to_string()))
     }
 }

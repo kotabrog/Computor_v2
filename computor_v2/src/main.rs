@@ -17,6 +17,18 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
     let vec = lexer.make_token_vec()?;
     // println!("{:?}", vec);
 
+    if Parser::is_show_variable(&vec) {
+        let string = data_base.show_variable();
+        print!("{}", string);
+        return Ok(())
+    }
+
+    if Parser::is_show_functions(&vec) {
+        let string = data_base.show_function()?;
+        print!("{}", string);
+        return Ok(())
+    }
+
     let (left_vec, right_vec) = Parser::separate_equal(vec)?;
 
     if Parser::is_question_tokens(&right_vec) {
@@ -68,7 +80,7 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         }
 
         data_base.register_func(key, tree, variable.clone());
-        println!("  {}", parser.print_tree(&data_base.get_func(key).unwrap().0)?);
+        println!("  {}", Parser::print_tree(&data_base.get_func(key).unwrap().0)?);
     } else {
         println!("  {}", "Unsupported format");
     }

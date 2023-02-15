@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::num::Num;
 use crate::binary_tree::BinaryTree;
-use crate::parser::Element;
+use crate::parser::{Parser, Element};
 
 
 #[derive(Debug, PartialEq)]
@@ -57,6 +57,41 @@ impl DataBase {
         match data {
             Data::Num(_) => None,
             Data::Func(f) => Some(f),
+        }
+    }
+
+    pub fn show_variable(&self) -> String {
+        let mut string = String::new();
+        for (key, value) in self.data.iter() {
+            match value {
+                Data::Num(n) => string += format!("{}: {}\n", key, n).as_str(),
+                Data::Func(_) => {},
+            }
+        }
+        if string.is_empty() {
+            format!("No variables defined yet")
+        } else {
+            string
+        }
+    }
+
+    pub fn show_function(&self) -> Result<String, String> {
+        let mut string = String::new();
+        for (key, value) in self.data.iter() {
+            match value {
+                Data::Num(_) => {},
+                Data::Func(b) => {
+                    let func_tree = &b.0;
+                    let variable = &b.1;
+                    let tree_string = Parser::print_tree(func_tree)?;
+                    string += format!("{}({}): {}\n", key, variable, tree_string).as_str()
+                },
+            }
+        }
+        if string.is_empty() {
+            Ok(format!("No functions defined yet"))
+        } else {
+            Ok(string)
         }
     }
 }
