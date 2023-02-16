@@ -9,9 +9,17 @@ pub struct Complex {
 
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct Matrix {
+    elem: Vec<Vec<f64>>,
+    size: (usize, usize),
+}
+
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Num {
     Float(f64),
-    Complex(Box<Complex>)
+    Complex(Box<Complex>),
+    Matrix(Box<Matrix>)
 }
 
 
@@ -20,21 +28,21 @@ impl Complex {
         Complex { r, z }
     }
 
-    fn new() -> Complex {
-        Self::from_two_float(0.0, 1.0)
-    }
+    // fn new() -> Complex {
+    //     Self::from_two_float(0.0, 1.0)
+    // }
 
-    fn is_float(&self) -> bool {
-        self.z == 0.0
-    }
+    // fn is_float(&self) -> bool {
+    //     self.z == 0.0
+    // }
 
-    fn to_float(&self) -> Option<f64> {
-        if self.is_float() {
-            Some(self.r)
-        } else {
-            None
-        }
-    }
+    // fn to_float(&self) -> Option<f64> {
+    //     if self.is_float() {
+    //         Some(self.r)
+    //     } else {
+    //         None
+    //     }
+    // }
 }
 
 
@@ -73,6 +81,137 @@ impl fmt::Display for Complex {
 }
 
 
+impl Matrix {
+    pub fn from_vec(elem: Vec<Vec<f64>>) -> Option<Matrix> {
+        let horizontal_len = elem.len();
+        if horizontal_len == 0 {
+            return None
+        }
+        let vertical_len = elem[0].len();
+        for row in &elem {
+            if row.len() != vertical_len {
+                return None
+            }
+        }
+        Some(Matrix { elem, size: (horizontal_len, vertical_len) })
+    }
+
+
+    pub fn at(&self, row: usize, col: usize) -> Option<f64> {
+        if row >= self.size.0 || col >= self.size.1 {
+            None
+        } else {
+            Some(self.elem[row][col])
+        }
+    }
+
+
+    pub fn at_mut(&mut self, row: usize, col: usize) -> Option<&mut f64> {
+        if row >= self.size.0 || col >= self.size.1 {
+            None
+        } else {
+            Some(&mut self.elem[row][col])
+        }
+    }
+
+
+    pub fn size(&self) -> &(usize, usize) {
+        &self.size
+    }
+
+
+    pub fn apply_all_terms_float<F>(&self, apply_fn: F) -> Matrix
+        where F: Fn(&f64) -> f64
+    {
+        let mut vec = vec![vec![0.0; self.size.1]; self.size.0];
+        for m in 0..self.size.0 {
+            for n in 0..self.size.1 {
+                vec[m][n] = apply_fn(&self.elem[m][n]);
+            }
+        }
+        return Matrix { elem: vec, size: self.size }
+    }
+
+
+    pub fn apply_all_terms_matrix<F>(&self, rhs: &Matrix, apply_fn: F) -> Option<Matrix>
+        where F: Fn(&f64, &f64) -> f64
+    {
+        if self.size != rhs.size {
+            return None
+        }
+        let mut vec = vec![vec![0.0; self.size.1]; self.size.0];
+        for m in 0..self.size.0 {
+            for n in 0..self.size.1 {
+                vec[m][n] = apply_fn(&self.elem[m][n], &rhs.elem[m][n]);
+            }
+        }
+        return Some(Matrix { elem: vec, size: self.size })
+    }
+
+
+    pub fn checked_value(&self) -> Result<&Matrix, String> {
+        for m in 0..self.size.0 {
+            for n in 0..self.size.1 {
+                if !self.elem[m][n].is_finite() {
+                    return Err(format!("The calculation resulted in '{}'.", self.elem[m][n]))
+                }
+            }
+        }
+        Ok(self)
+    }
+
+
+    pub fn to_string_rich(&self) -> String {
+        let mut string = String::new();
+        for m in 0..self.size.0 {
+            string += "  [";
+            for n in 0..self.size.1 {
+                string.push_str(format!(" {} ,", self.elem[m][n]).as_str());
+            }
+            string.pop();
+            string += "]\n";
+        }
+        string.pop();
+        string
+    }
+
+
+    pub fn matrix_mul(&self, rhs: &Matrix) -> Option<Matrix> {
+        if self.size.1 != rhs.size.0 {
+            return None
+        }
+        let mut vec = vec![vec![0.0; rhs.size.1]; self.size.0];
+        for m in 0..self.size.0 {
+            for n in 0..rhs.size.1 {
+                for k in 0..self.size.1 {
+                    vec[m][n] += self.elem[m][k] * rhs.elem[k][n];
+                }
+            }
+        }
+        Some(Matrix { elem: vec, size: (self.size.0, rhs.size.1) })
+    }
+}
+
+
+impl fmt::Display for Matrix {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut string = String::new();
+        string += "[";
+        for m in 0..self.size.0 {
+            string += "[";
+            for n in 0..self.size.1 {
+                string.push_str(format!("{},", self.elem[m][n]).as_str());
+            }
+            string.pop();
+            string += "];";
+        }
+        string.pop();
+        string += "]";
+        write!(f, "{}", string)
+    }
+}
+
+
 impl Num {
     pub fn from_string_to_float(string: &String) -> Result<Num, String> {
         match string.parse() {
@@ -103,6 +242,14 @@ impl Num {
     }
 
 
+    pub fn from_vec(elem: Vec<Vec<f64>>) -> Result<Num, String> {
+        match Matrix::from_vec(elem) {
+            Some(m) => Ok(Num::Matrix(Box::new(m))),
+            None => Err("Conversion Failure".to_string())
+        }
+    }
+
+
     pub fn checked_value(&self) -> Result<&Num, String> {
         match self {
             Num::Float(n) => {
@@ -122,6 +269,10 @@ impl Num {
                     Ok(&self)
                 }
             },
+            Num::Matrix(b) => {
+                b.checked_value()?;
+                Ok(&self)
+            },
         }
     }
 
@@ -136,6 +287,13 @@ impl Num {
                 => Ok(Num::from_two_float(l.r + r, l.z)),
             (Num::Complex(l), Num::Complex(r))
                 => Ok(Num::from_two_float(l.r + r.r, l.z + r.z)),
+            (Num::Matrix(l), Num::Matrix(r)) => {
+                match l.apply_all_terms_matrix(r, |x, y| x + y) {
+                    None => Err(format!("Unsupported different sizes operator {} + {}", self, rhs)),
+                    Some(m) => Ok(Num::Matrix(Box::new(m))),
+                }
+            },
+            _ => Err(format!("Unsupported operator {} + {}", self, rhs)),
         }
     }
 
@@ -150,6 +308,13 @@ impl Num {
                 => Ok(Num::from_two_float(l.r - r, l.z)),
             (Num::Complex(l), Num::Complex(r))
                 => Ok(Num::from_two_float(l.r - r.r, l.z - r.z)),
+            (Num::Matrix(l), Num::Matrix(r)) => {
+                match l.apply_all_terms_matrix(r, |x, y| x - y) {
+                    None => Err(format!("Unsupported different sizes operator {} - {}", self, rhs)),
+                    Some(m) => Ok(Num::Matrix(Box::new(m))),
+                }
+            },
+            _ => Err(format!("Unsupported operator ({}) - ({})", self, rhs)),
         }
     }
 
@@ -164,6 +329,17 @@ impl Num {
                 => Ok(Num::from_two_float(l.r * r, l.z * r)),
             (Num::Complex(l), Num::Complex(r))
                 => Ok(Num::from_two_float(l.r * r.r - l.z * r.z, l.r * r.z + l.z * r.r)),
+            (Num::Float(l), Num::Matrix(r))
+                => Ok(Num::Matrix(Box::new(r.apply_all_terms_float(|x| l * x)))),
+            (Num::Matrix(l), Num::Float(r))
+                => Ok(Num::Matrix(Box::new(l.apply_all_terms_float(|x| x * r)))),
+            (Num::Matrix(l), Num::Matrix(r)) => {
+                match l.apply_all_terms_matrix(r, |x, y| x * y) {
+                    None => Err(format!("Unsupported different sizes operator {} * {}", self, rhs)),
+                    Some(m) => Ok(Num::Matrix(Box::new(m))),
+                }
+            },
+            _ => Err(format!("Unsupported operator ({}) * ({})", self, rhs)),
         }
     }
 
@@ -184,6 +360,17 @@ impl Num {
                 Ok(self.supported_mul(&r2).unwrap()
                         .supported_div(&Num::Float(v)).unwrap())
             },
+            (Num::Float(l), Num::Matrix(r))
+                => Ok(Num::Matrix(Box::new(r.apply_all_terms_float(|x| l / x)))),
+            (Num::Matrix(l), Num::Float(r))
+                => Ok(Num::Matrix(Box::new(l.apply_all_terms_float(|x| x / r)))),
+            (Num::Matrix(l), Num::Matrix(r)) => {
+                match l.apply_all_terms_matrix(r, |x, y| x / y) {
+                    None => Err(format!("Unsupported different sizes operator {} / {}", self, rhs)),
+                    Some(m) => Ok(Num::Matrix(Box::new(m))),
+                }
+            },
+            _ => Err(format!("Unsupported operator ({}) / ({})", self, rhs)),
         }
     }
 
@@ -209,6 +396,19 @@ impl Num {
     }
 
 
+    pub fn supported_matrix_mul(&self, rhs: &Num) -> Result<Num, String> {
+        match (self, rhs) {
+            (Num::Matrix(l), Num::Matrix(r)) => {
+                match l.matrix_mul(r) {
+                    Some(m) => Ok(Num::Matrix(Box::new(m))),
+                    None => Err(format!("Unsupported sizes operator {} ** {}", self, rhs)),
+                }
+            },
+            _ => Err(format!("Unsupported operator ({}) ** ({})", self, rhs))
+        }
+    }
+
+
     pub fn is_need_sign_reverse(&self) -> bool {
         match self {
             Num::Float(n) => n.is_sign_negative(),
@@ -216,6 +416,7 @@ impl Num {
                 (n.r == 0.0 && n.z.is_sign_negative())
                     || n.r.is_sign_negative()
             }
+            Num::Matrix(_) => false,
         }
     }
 
@@ -226,6 +427,7 @@ impl Num {
             match &self {
                 Num::Float(_) => false,
                 Num::Complex(n) => n.r != 0.0 && n.z != 0.0,
+                Num::Matrix(_) => false
             }
         }
     }
@@ -234,6 +436,14 @@ impl Num {
         match &self {
             Num::Float(n) => Num::Float(-n),
             Num::Complex(n) => Num::from_two_float_to_complex(-n.r, -n.z),
+            Num::Matrix(n) => Num::Matrix(Box::new(n.apply_all_terms_float(|x| -x)))
+        }
+    }
+
+    pub fn matrix_to_string_rich(&self) -> Option<String> {
+        match &self {
+            Num::Matrix(m) => Some(m.to_string_rich()),
+            _ => None,
         }
     }
 }
@@ -244,6 +454,7 @@ impl fmt::Display for Num {
         match self {
             Num::Float(n) => write!(f, "{}", n),
             Num::Complex(n) => write!(f, "{}", n),
+            Num::Matrix(n) => write!(f, "{}", n),
         }
     }
 }
@@ -306,6 +517,22 @@ mod tests {
     }
 
     #[test]
+    fn from_vec_one() {
+        let vec = vec![vec![1.0]];
+        let num = match Num::from_vec(vec) {
+            Err(_) => panic!(),
+            Ok(m) => m
+        };
+        match num {
+            Num::Matrix(m) => {
+                assert_eq!(m.size(), &(1, 1));
+                assert_eq!(m.at(0, 0), Some(1.0));
+            },
+            _ => panic!()
+        }
+    }
+
+    #[test]
     fn checked_value_float_normal() {
         let n = Num::Float(1.0);
         assert_eq!(n.checked_value(),
@@ -345,6 +572,28 @@ mod tests {
         let n = Num::from_two_float(f64::NAN, 1.0);
         assert_eq!(n.checked_value(),
                    Err(format!("The calculation resulted in '{}'.", f64::NAN)));
+    }
+
+    #[test]
+    fn checked_value_matrix_normal() {
+        let vec = vec![vec![1.0; 3]; 2];
+        let num = match Num::from_vec(vec) {
+            Err(_) => panic!(),
+            Ok(m) => m
+        };
+        assert_eq!(num.checked_value(), Ok(&num))
+    }
+
+    #[test]
+    fn checked_value_matrix_inf() {
+        let mut vec = vec![vec![1.0; 3]; 2];
+        vec[1][1] = f64::INFINITY;
+        let num = match Num::from_vec(vec) {
+            Err(_) => panic!(),
+            Ok(m) => m
+        };
+        assert_eq!(num.checked_value(),
+            Err(format!("The calculation resulted in '{}'.", f64::INFINITY)));
     }
 
     #[test]
@@ -396,6 +645,42 @@ mod tests {
     }
 
     #[test]
+    fn supported_add_matrix_matrix() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![3.0; 3]; 2];
+        vec[0][0] = 2.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_add(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_add_error_matrix_matrix_diff_size() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let vec = vec![vec![2.0; 2]; 2];
+        let rhs = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_add(&rhs),
+            Err(format!("Unsupported different sizes operator [[1,1,1];[1,1,1]] + [[2,2];[2,2]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_add_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_add(&rhs),
+            Err(format!("Unsupported operator [[1,1,1];[1,1,1]] + 3 + i")));
+        Ok(())
+    }
+
+    #[test]
     fn supported_sub_float_float() {
         let lhs = Num::Float(1.0);
         let rhs = Num::Float(2.0);
@@ -436,6 +721,42 @@ mod tests {
     }
 
     #[test]
+    fn supported_sub_matrix_matrix() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![-1.0; 3]; 2];
+        vec[0][0] = 0.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_sub(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_sub_error_matrix_matrix_diff_size() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let vec = vec![vec![2.0; 2]; 2];
+        let rhs = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_sub(&rhs),
+            Err(format!("Unsupported different sizes operator [[1,1,1];[1,1,1]] - [[2,2];[2,2]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_sub_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_sub(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) - (3 + i)")));
+        Ok(())
+    }
+
+    #[test]
     fn supported_mul_float_float() {
         let lhs = Num::Float(3.0);
         let rhs = Num::Float(2.0);
@@ -473,6 +794,68 @@ mod tests {
         let rhs = Num::from_two_float(3.0, 1.0);
         assert_eq!(lhs.supported_mul(&rhs),
                    Ok(Num::from_two_float(-7.0, 1.0)));
+    }
+
+    #[test]
+    fn supported_mul_matrix_matrix() -> Result<(), String> {
+        let vec = vec![vec![3.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![6.0; 3]; 2];
+        vec[0][0] = 3.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_mul(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_mul_float_matrix() -> Result<(), String> {
+        let lhs = Num::Float(3.0);
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![6.0; 3]; 2];
+        vec[0][0] = 3.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_mul(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_mul_matrix_float() -> Result<(), String> {
+        let vec = vec![vec![3.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::Float(2.0);
+        let vec = vec![vec![6.0; 3]; 2];
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_mul(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_mul_error_matrix_matrix_diff_size() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let vec = vec![vec![2.0; 2]; 2];
+        let rhs = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_mul(&rhs),
+            Err(format!("Unsupported different sizes operator [[1,1,1];[1,1,1]] * [[2,2];[2,2]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_mul_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_mul(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) * (3 + i)")));
+        Ok(())
     }
 
     #[test]
@@ -530,6 +913,68 @@ mod tests {
         let rhs = Num::Float(0.0);
         assert_eq!(lhs.supported_div(&rhs),
                     Ok(Num::from_two_float(-f64::INFINITY, f64::INFINITY)));
+    }
+
+    #[test]
+    fn supported_div_matrix_matrix() -> Result<(), String> {
+        let vec = vec![vec![3.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![1.5; 3]; 2];
+        vec[0][0] = 3.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_div(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_div_float_matrix() -> Result<(), String> {
+        let lhs = Num::Float(3.0);
+        let mut vec = vec![vec![2.0; 3]; 2];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![1.5; 3]; 2];
+        vec[0][0] = 3.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_div(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_div_matrix_float() -> Result<(), String> {
+        let vec = vec![vec![3.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::Float(2.0);
+        let vec = vec![vec![1.5; 3]; 2];
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_div(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_div_error_matrix_matrix_diff_size() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let vec = vec![vec![2.0; 2]; 2];
+        let rhs = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_div(&rhs),
+            Err(format!("Unsupported different sizes operator [[1,1,1];[1,1,1]] / [[2,2];[2,2]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_div_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_div(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) / (3 + i)")));
+        Ok(())
     }
 
     #[test]
@@ -637,6 +1082,16 @@ mod tests {
     }
 
     #[test]
+    fn supported_rem_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_rem(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) % (3 + i)")));
+        Ok(())
+    }
+
+    #[test]
     fn supported_pow_float_float() {
         let lhs = Num::Float(5.0);
         let rhs = Num::Float(3.0);
@@ -706,6 +1161,53 @@ mod tests {
         let rhs = Num::from_two_float(2.0, 3.0);
         assert_eq!(lhs.supported_pow(&rhs),
                    Err(format!("Unsupported operator ({}) ^ ({})", lhs, rhs)));
+    }
+
+    #[test]
+    fn supported_pow_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_pow(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) ^ (3 + i)")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_matrix_mul_matrix_matrix() -> Result<(), String> {
+        let vec = vec![vec![3.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![2.0; 2]; 3];
+        vec[0][0] = 1.0;
+        let rhs = Num::from_vec(vec)?;
+        let mut vec = vec![vec![15.0; 2]; 2];
+        vec[0][1] = 18.0;
+        vec[1][1] = 18.0;
+        let ans = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_matrix_mul(&rhs),
+                   Ok(ans));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_matrix_mul_error_matrix_matrix_diff_size() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let vec = vec![vec![2.0; 2]; 2];
+        let rhs = Num::from_vec(vec)?;
+        assert_eq!(lhs.supported_matrix_mul(&rhs),
+            Err(format!("Unsupported sizes operator [[1,1,1];[1,1,1]] ** [[2,2];[2,2]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn supported_matrix_mul_error_unsupported() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let lhs = Num::from_vec(vec)?;
+        let rhs = Num::from_two_float(3.0, 1.0);
+        assert_eq!(lhs.supported_matrix_mul(&rhs),
+            Err(format!("Unsupported operator ([[1,1,1];[1,1,1]]) ** (3 + i)")));
+        Ok(())
     }
 
     #[test]
@@ -790,5 +1292,21 @@ mod tests {
     fn fmt_complex_neg_n_m() {
         let num = Num::from_two_float_to_complex(2.0, -3.0);
         assert_eq!(format!("{}", num), "2 - 3i".to_string());
+    }
+
+    #[test]
+    fn matrix_to_string_rich_small() -> Result<(), String> {
+        let vec = vec![vec![1.0]];
+        let num = Num::from_vec(vec)?;
+        assert_eq!(num.matrix_to_string_rich(), Some("  [ 1 ]".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn matrix_to_string_rich_normal() -> Result<(), String> {
+        let vec = vec![vec![1.0; 3]; 2];
+        let num = Num::from_vec(vec)?;
+        assert_eq!(num.matrix_to_string_rich(), Some("  [ 1 , 1 , 1 ]\n  [ 1 , 1 , 1 ]".to_string()));
+        Ok(())
     }
 }

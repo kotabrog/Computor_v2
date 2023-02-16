@@ -143,7 +143,7 @@ impl Parser {
             Token::Slash => Ok(Operator::Div),
             Token::Percent => Ok(Operator::Rem),
             Token::Caret => Ok(Operator::Pow),
-            Token::TwoAsterisk => Ok(Operator::Pow),
+            Token::TwoAsterisk => Ok(Operator::MatrixMul),
             _ => Err(format!("syntax error")),
         }
     }
@@ -197,6 +197,7 @@ impl Parser {
             Token::Slash => return self.add_operator(tree, Operator::Div, data_base),
             Token::Percent => return self.add_operator(tree, Operator::Rem, data_base),
             Token::Caret => return self.add_operator(tree, Operator::Pow, data_base),
+            Token::TwoAsterisk => return self.add_operator(tree, Operator::MatrixMul, data_base),
             Token::LParen => return self.add_paren(tree, data_base),
             Token::RParen => return Ok(true),
             Token::String(s) => {
@@ -207,7 +208,7 @@ impl Parser {
                     return self.add_variable(tree, string_box)
                 }
             },
-            _ => return Err(format!("{:?}: wip", token))
+            _ => return Err(format!("syntax error")),
         }
         Ok(false)
     }
@@ -586,7 +587,7 @@ impl Parser {
                                     Self::add_paren_to_value(tree, &num, right);
                                 }
                             },
-                            Num::Float(_) => {}
+                            Num::Float(_) | Num::Matrix(_) => {}
                         }
                     }
                 }
