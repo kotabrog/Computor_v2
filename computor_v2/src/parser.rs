@@ -86,6 +86,19 @@ impl Parser {
         }
     }
 
+    pub fn get_num_token_float(token: &Token) -> Result<f64, String> {
+        match token {
+            Token::NumString(s) => {
+                let num = Self::string_to_num(s)?;
+                match num {
+                    Num::Float(n) => Ok(n),
+                    _ => Err("syntax error".to_string()),
+                }
+            }
+            _ => Err("syntax error".to_string())
+        }
+    }
+
     pub fn make_tree(&mut self, data_base: &DataBase) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
         self.root_tree_loop(&mut tree, data_base)?;
@@ -199,6 +212,7 @@ impl Parser {
             Token::Caret => return self.add_operator(tree, Operator::Pow, data_base),
             Token::TwoAsterisk => return self.add_operator(tree, Operator::MatrixMul, data_base),
             Token::LParen => return self.add_paren(tree, data_base),
+            Token::LBracket => return self.add_matrix(tree),
             Token::RParen => return Ok(true),
             Token::String(s) => {
                 let string_box = s.clone();
@@ -278,6 +292,81 @@ impl Parser {
             self.insert_mul();
         }
         Ok(false)
+    }
+
+    fn add_matrix(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        let next_tree = match tree {
+            BinaryTree::Empty => tree,
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
+                        self.insert_mul();
+                        return Ok(false)
+                    }
+                    Element::Dummy => return Err(format!("syntax error")),
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            self.insert_mul();
+                            return Ok(false)
+                        }
+                    },
+                }
+                tree.right_mut().unwrap()
+            }
+        };
+        *next_tree = BinaryTree::from_element(Element::Num(self.token_to_matrix()?));
+        if self.is_num() || self.is_string_token() {
+            self.insert_mul();
+        }
+        Ok(false)
+    }
+
+    fn token_to_matrix(&mut self) -> Result<Num, String> {
+        let mut vec = Vec::new();
+        self.index_plus();
+        let flag = 'outer: loop {
+            if !self.is_next_token(Token::LBracket) {
+                break false
+            }
+            self.index_plus();
+            let mut v = Vec::new();
+            loop {
+                if !self.is_num() {
+                    break 'outer false
+                }
+                let value = Self::get_num_token_float(self.get_next_token()?)?;
+                v.push(value);
+                self.index_plus();
+                if !self.is_next_token(Token::Comma) {
+                    break
+                }
+                self.index_plus();
+            }
+            if !self.is_next_token(Token::RBracket) {
+                break false
+            }
+            self.index_plus();
+            vec.push(v);
+            if !self.is_next_token(Token::SemiColon) {
+                break true
+            }
+            self.index_plus();
+        };
+        if !flag || !self.is_next_token(Token::RBracket) {
+            Err(format!("syntax error"))
+        } else {
+            self.index_plus();
+            Num::from_vec(vec)
+        }
+    }
+
+    fn is_next_token(&mut self, token: Token) -> bool {
+        match self.get_next_token() {
+            Ok(t) => {
+                t == &token
+            },
+            Err(_) => false,
+        }
     }
 
     fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator, data_base: &DataBase) -> Result<bool, String> {
@@ -548,7 +637,8 @@ impl Parser {
                             Operator::Rem => left_value.supported_rem(&right_value)?,
                             Operator::Pow => left_value.supported_pow(&right_value)?,
                             Operator::Paren => left_value,
-                            _ => todo!("wip matrix pattern"),
+                            Operator::MatrixMul => left_value.supported_matrix_mul(&right_value)?,
+                            _ => return Err(format!("syntax error")),
                         }
                     },
                     (None, Some(right_value)) => {
@@ -1141,6 +1231,28 @@ mod tests {
     }
 
     #[test]
+    fn calculation_matrix_long() -> Result<(), String> {
+        let code = "[[1,2]] [[2,1]] ** [[3, 3, 3];[3, 3, 3]]".to_string();
+        let num = Num::from_vec(vec![vec![12.0; 3]])?;
+        assert_eq!(calculation_test(code), Ok(num));
+        Ok(())
+    }
+
+    #[test]
+    fn calculation_error_matrix_plus() -> Result<(), String> {
+        let code = "2 + [[3, 3, 3];[3, 3, 3]]".to_string();
+        assert_eq!(calculation_test(code), Err(format!("error calculation: Unsupported operator 2 + [[3,3,3];[3,3,3]]")));
+        Ok(())
+    }
+
+    #[test]
+    fn calculation_error_matrix_size() -> Result<(), String> {
+        let code = "[[3, 3];[3, 3]] + [[3, 3, 3];[3, 3, 3]]".to_string();
+        assert_eq!(calculation_test(code), Err(format!("error calculation: Unsupported different sizes operator [[3,3];[3,3]] + [[3,3,3];[3,3,3]]")));
+        Ok(())
+    }
+
+    #[test]
     fn calculation_error_complex_rem() {
         let code = "3 % i".to_string();
         assert_eq!(calculation_test(code), Err("error calculation: Unsupported operator (3) % (i)".to_string()))
@@ -1457,6 +1569,15 @@ mod tests {
         let variable = "a".to_string();
         let code = "func(2 + i)".to_string();
         assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::from_two_float(2.0, 2.0)))
+    }
+
+    #[test]
+    fn calculation_function_matrix() {
+        let function = "a ** [[1,1]]".to_string();
+        let function_name = "func".to_string();
+        let variable = "a".to_string();
+        let code = "func([[1];[1];[1]])".to_string();
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::from_vec(vec![vec![1.0;2];3]).unwrap()))
     }
 
     #[test]

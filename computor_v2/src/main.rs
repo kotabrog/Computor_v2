@@ -10,6 +10,7 @@ mod operator;
 use lexer::Lexer;
 use parser::Parser;
 use data_base::DataBase;
+use num::Num;
 
 
 fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
@@ -41,9 +42,7 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
             Some(v) => v,
             None => return Err(format!("Undefined Variables")),
         };
-        // println!("{:?}", left_value);
-
-        println!("  {}", left_value);
+        println!("{}", left_value.to_show_value_string());
     } else if Parser::is_variable_register(&left_vec) {
         let mut parser = Parser::new(right_vec);
         let mut tree = parser.make_tree(data_base)?;
@@ -58,7 +57,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
 
         let key = Parser::get_string_token_string(&left_vec[0])?;
         data_base.register_num(key, right_value);
-        println!("  {}", data_base.get_num(&key).unwrap());
+        let num = data_base.get_num(&key).unwrap();
+        println!("{}", num.to_show_value_string());
     } else if Parser::is_func_register(&left_vec) {
         let key = Parser::get_string_token_string(&left_vec[0])?;
         let variable = Parser::get_string_token_string(&left_vec[2])?;

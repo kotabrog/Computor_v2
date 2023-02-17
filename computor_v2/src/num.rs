@@ -440,10 +440,10 @@ impl Num {
         }
     }
 
-    pub fn matrix_to_string_rich(&self) -> Option<String> {
-        match &self {
-            Num::Matrix(m) => Some(m.to_string_rich()),
-            _ => None,
+    pub fn to_show_value_string(&self) -> String {
+        match self {
+            Num::Matrix(m) => m.to_string_rich(),
+            _ => format!("  {}", self),
         }
     }
 }
@@ -1295,18 +1295,18 @@ mod tests {
     }
 
     #[test]
-    fn matrix_to_string_rich_small() -> Result<(), String> {
+    fn to_show_value_string_small() -> Result<(), String> {
         let vec = vec![vec![1.0]];
         let num = Num::from_vec(vec)?;
-        assert_eq!(num.matrix_to_string_rich(), Some("  [ 1 ]".to_string()));
+        assert_eq!(num.to_show_value_string(), "  [ 1 ]".to_string());
         Ok(())
     }
 
     #[test]
-    fn matrix_to_string_rich_normal() -> Result<(), String> {
+    fn to_show_value_string_normal() -> Result<(), String> {
         let vec = vec![vec![1.0; 3]; 2];
         let num = Num::from_vec(vec)?;
-        assert_eq!(num.matrix_to_string_rich(), Some("  [ 1 , 1 , 1 ]\n  [ 1 , 1 , 1 ]".to_string()));
+        assert_eq!(num.to_show_value_string(), "  [ 1 , 1 , 1 ]\n  [ 1 , 1 , 1 ]".to_string());
         Ok(())
     }
 }
