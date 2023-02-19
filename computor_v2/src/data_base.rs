@@ -69,7 +69,7 @@ impl DataBase {
             }
         }
         if string.is_empty() {
-            format!("No variables defined yet")
+            format!("No variables defined yet\n")
         } else {
             string
         }
@@ -89,7 +89,7 @@ impl DataBase {
             }
         }
         if string.is_empty() {
-            Ok(format!("No functions defined yet"))
+            Ok(format!("No functions defined yet\n"))
         } else {
             Ok(string)
         }

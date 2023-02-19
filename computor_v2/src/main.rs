@@ -13,21 +13,30 @@ use parser::Parser;
 use data_base::DataBase;
 
 
+fn show_variable(data_base: &DataBase) -> Result<(), String> {
+    let string = data_base.show_variable();
+    print!("{}", string);
+    return Ok(())
+}
+
+
+fn show_function(data_base: &DataBase) -> Result<(), String> {
+    let string = data_base.show_function()?;
+    print!("{}", string);
+    return Ok(())
+}
+
+
 fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
     let mut lexer = Lexer::new(&code);
     let vec = lexer.make_token_vec()?;
-    // println!("{:?}", vec);
 
     if Parser::is_show_variable(&vec) {
-        let string = data_base.show_variable();
-        print!("{}", string);
-        return Ok(())
+        return show_variable(&data_base)
     }
 
     if Parser::is_show_functions(&vec) {
-        let string = data_base.show_function()?;
-        print!("{}", string);
-        return Ok(())
+        return show_function(&data_base)
     }
 
     let (left_vec, right_vec) = Parser::separate_equal(vec)?;

@@ -44,7 +44,6 @@ impl Equation {
         let mut variable = None;
         self.set_one_tree(lhs, false, &mut variable)?;
         self.set_one_tree(rhs, true, &mut variable)?;
-        println!("{:?}", self.expr);
         self.expr = Self::sort_expr(&self.expr)?;
         if self.expr.is_empty() {
             self.expr.push(Term { coefficient: 0.0, degree: 0 })
@@ -59,13 +58,18 @@ impl Equation {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
                 match &node_box.element {
-                    Element::Dummy | Element::Func(_) => return Err(format!("syntax error")),
+                    Element::Dummy => {},
+                    Element::Func(_) => return Err(format!("syntax error")),
                     Element::Variable(_) | Element::Num(_) => self.set_one_terms(tree, right_side, variable)?,
                     Element::Operator(op) => {
                         match op {
                             Operator::Plus | Operator::Minus => {
                                 self.set_one_tree(tree.left().unwrap(), right_side, variable)?;
-                                self.set_one_tree(tree.right().unwrap(), right_side, variable)?;
+                                if let Operator::Minus = op {
+                                    self.set_one_tree(tree.right().unwrap(), !right_side, variable)?;
+                                } else {
+                                    self.set_one_tree(tree.right().unwrap(), right_side, variable)?;
+                                }
                             },
                             _ => self.set_one_terms(tree, right_side, variable)?,
                         }
@@ -252,7 +256,7 @@ impl Equation {
                     Self::operate_two_term_mul(left_term, right_term, &mut temp_expr)?;
                 }
             }
-            expr = temp_expr;
+            expr = Self::sort_expr(&temp_expr)?;
         }
         if expr.is_empty() {
             expr.push(Term { coefficient: 0.0, degree: 0 });
@@ -302,7 +306,7 @@ impl Equation {
             } else if term.coefficient.abs() == 1.0 {
                 string += format!("{}^{} ", self.get_variable_string()?, term.degree).as_str()
             } else {
-                string += format!("{}{}^{} ", term.coefficient, self.get_variable_string()?, term.degree).as_str()
+                string += format!("{}{}^{} ", term.coefficient.abs(), self.get_variable_string()?, term.degree).as_str()
             }
         }
         string.pop();
@@ -436,6 +440,86 @@ mod tests {
             },
             Err(string) => string,
         }, format!("x^2"));
+        Ok(())
+    }
+
+    #[test]
+    fn make_equation_paren() -> Result<(), String> {
+        let equation_result = make_equation_test(
+            "(x + 1)^2".to_string(),
+            "0".to_string(),
+        );
+        assert_eq!(match equation_result {
+            Ok(equation) => match equation.to_string() {
+                Ok(string) => string,
+                Err(string) => string,
+            },
+            Err(string) => string,
+        }, format!("1 + 2x^1 + x^2"));
+        Ok(())
+    }
+
+    #[test]
+    fn make_equation_paren_in_paren() -> Result<(), String> {
+        let equation_result = make_equation_test(
+            "(1 + (x - 2))^2".to_string(),
+            "0".to_string(),
+        );
+        assert_eq!(match equation_result {
+            Ok(equation) => match equation.to_string() {
+                Ok(string) => string,
+                Err(string) => string,
+            },
+            Err(string) => string,
+        }, format!("1 - 2x^1 + x^2"));
+        Ok(())
+    }
+
+    #[test]
+    fn make_equation_paren_in_paren_minus_pow() -> Result<(), String> {
+        let equation_result = make_equation_test(
+            "(1 - (x - 2)^2)^2".to_string(),
+            "0".to_string(),
+        );
+        assert_eq!(match equation_result {
+            Ok(equation) => match equation.to_string() {
+                Ok(string) => string,
+                Err(string) => string,
+            },
+            Err(string) => string,
+        }, format!("9 - 24x^1 + 22x^2 - 8x^3 + x^4"));
+        Ok(())
+    }
+
+    #[test]
+    fn make_equation_paren_in_paren_minus() -> Result<(), String> {
+        let equation_result = make_equation_test(
+            "(1 - (x - 2))^2".to_string(),
+            "0".to_string(),
+        );
+        assert_eq!(match equation_result {
+            Ok(equation) => match equation.to_string() {
+                Ok(string) => string,
+                Err(string) => string,
+            },
+            Err(string) => string,
+        }, format!("9 - 6x^1 + x^2"));
+        Ok(())
+    }
+
+    #[test]
+    fn make_equation_long() -> Result<(), String> {
+        let equation_result = make_equation_test(
+            "-x^3 + (x - (x + 1)^2)^3 - 1".to_string(),
+            "x + 2x^2 - 3x^3".to_string(),
+        );
+        assert_eq!(match equation_result {
+            Ok(equation) => match equation.to_string() {
+                Ok(string) => string,
+                Err(string) => string,
+            },
+            Err(string) => string,
+        }, format!("-2 - 4x^1 - 8x^2 - 5x^3 - 6x^4 - 3x^5 - x^6"));
         Ok(())
     }
 }
