@@ -6,11 +6,11 @@ mod binary_tree;
 mod parser;
 mod data_base;
 mod operator;
+mod equation;
 
 use lexer::Lexer;
 use parser::Parser;
 use data_base::DataBase;
-use num::Num;
 
 
 fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
