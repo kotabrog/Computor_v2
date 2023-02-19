@@ -8,7 +8,7 @@ mod data_base;
 mod operator;
 mod equation;
 
-use lexer::Lexer;
+use lexer::{Lexer, Token};
 use parser::Parser;
 use data_base::DataBase;
 
@@ -16,16 +16,71 @@ use data_base::DataBase;
 fn show_variable(data_base: &DataBase) -> Result<(), String> {
     let string = data_base.show_variable();
     print!("{}", string);
-    return Ok(())
+    Ok(())
 }
 
 
 fn show_function(data_base: &DataBase) -> Result<(), String> {
     let string = data_base.show_function()?;
     print!("{}", string);
-    return Ok(())
+    Ok(())
 }
 
+
+fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<(), String> {
+    let mut parser = Parser::new(left_vec);
+    let mut tree = parser.make_tree(data_base)?;
+
+    let left_value = parser.calculation(&mut tree, data_base, None)?;
+    let left_value = match left_value {
+        Some(v) => v,
+        None => return Err(format!("Undefined Variables")),
+    };
+    println!("{}", left_value.to_show_value_string());
+    Ok(())
+}
+
+
+fn register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+    let mut parser = Parser::new(right_vec);
+    let mut tree = parser.make_tree(data_base)?;
+
+    let right_value = parser.calculation(&mut tree, data_base, None)?;
+    let right_value = match right_value {
+        Some(v) => v,
+        None => return Err(format!("Undefined Variables")),
+    };
+
+    let key = Parser::get_string_token_string(&left_vec[0])?;
+    data_base.register_num(key, right_value);
+    let num = data_base.get_num(&key).unwrap();
+    println!("{}", num.to_show_value_string());
+    Ok(())
+}
+
+
+fn func_register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+    let key = Parser::get_string_token_string(&left_vec[0])?;
+    let variable = Parser::get_string_token_string(&left_vec[2])?;
+
+    let mut parser = Parser::new(right_vec);
+    let mut tree = parser.make_tree(data_base)?;
+
+    parser.calculation(&mut tree, data_base, Some((variable, None)))?;
+
+    match Parser::check_variable_in_tree(&tree)? {
+        Some(var) => {
+            if var != *variable {
+                return Err(format!("{}, {}: error two variable", var, variable))
+            }
+        },
+        None => {},
+    }
+
+    data_base.register_func(key, tree, variable.clone());
+    println!("  {}", Parser::print_tree(&data_base.get_func(key).unwrap().0)?);
+    Ok(())
+}
 
 fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
     let mut lexer = Lexer::new(&code);
@@ -33,68 +88,21 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
 
     if Parser::is_show_variable(&vec) {
         return show_variable(&data_base)
-    }
-
-    if Parser::is_show_functions(&vec) {
+    } else if Parser::is_show_functions(&vec) {
         return show_function(&data_base)
     }
 
     let (left_vec, right_vec) = Parser::separate_equal(vec)?;
 
     if Parser::is_question_tokens(&right_vec) {
-        let mut parser = Parser::new(left_vec);
-        let mut tree = parser.make_tree(data_base)?;
-        // println!("{:?}", tree);
-
-        let left_value = parser.calculation(&mut tree, data_base, None)?;
-        let left_value = match left_value {
-            Some(v) => v,
-            None => return Err(format!("Undefined Variables")),
-        };
-        println!("{}", left_value.to_show_value_string());
+        calculate(left_vec, &data_base)?;
     } else if Parser::is_variable_register(&left_vec) {
-        let mut parser = Parser::new(right_vec);
-        let mut tree = parser.make_tree(data_base)?;
-        // println!("{:?}", tree);
-
-        let right_value = parser.calculation(&mut tree, data_base, None)?;
-        let right_value = match right_value {
-            Some(v) => v,
-            None => return Err(format!("Undefined Variables")),
-        };
-        // println!("{:?}", right_value);
-
-        let key = Parser::get_string_token_string(&left_vec[0])?;
-        data_base.register_num(key, right_value);
-        let num = data_base.get_num(&key).unwrap();
-        println!("{}", num.to_show_value_string());
+        register(left_vec, right_vec, data_base)?;
     } else if Parser::is_func_register(&left_vec) {
-        let key = Parser::get_string_token_string(&left_vec[0])?;
-        let variable = Parser::get_string_token_string(&left_vec[2])?;
-        // println!("{}, {}", key, variable);
-
-        let mut parser = Parser::new(right_vec);
-        let mut tree = parser.make_tree(data_base)?;
-        // println!("{:?}", tree);
-
-        parser.calculation(&mut tree, data_base, Some((variable, None)))?;
-
-        match Parser::check_variable_in_tree(&tree)? {
-            Some(var) => {
-                if var != *variable {
-                    return Err(format!("{}, {}: error two variable", var, variable))
-                }
-            },
-            None => {},
-        }
-
-        data_base.register_func(key, tree, variable.clone());
-        println!("  {}", Parser::print_tree(&data_base.get_func(key).unwrap().0)?);
+        func_register(left_vec, right_vec, data_base)?;
     } else {
         println!("  {}", "Unsupported format");
     }
-
-    // println!("{:?}", data_base);
     Ok(())
 }
 
