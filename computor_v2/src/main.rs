@@ -7,10 +7,12 @@ mod parser;
 mod data_base;
 mod operator;
 mod equation;
+mod solution;
 
 use lexer::{Lexer, Token};
 use parser::Parser;
 use data_base::DataBase;
+use equation::Equation;
 
 
 fn show_variable(data_base: &DataBase) -> Result<(), String> {
@@ -37,6 +39,26 @@ fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<(), String> {
         None => return Err(format!("Undefined Variables")),
     };
     println!("{}", left_value.to_show_value_string());
+    Ok(())
+}
+
+
+fn solution_equation(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+    let mut parser = Parser::new(left_vec);
+    let mut left_tree = parser.make_tree(data_base)?;
+    parser.calculation(&mut left_tree, data_base, None)?;
+
+    let mut right_vec = right_vec;
+    right_vec.pop();
+    let mut parser = Parser::new(right_vec);
+    let mut right_tree = parser.make_tree(data_base)?;
+    parser.calculation(&mut right_tree, data_base, None)?;
+
+    let mut equation = Equation::new();
+    equation.make_equation(&left_tree, &right_tree)?;
+    println!("  {} = 0", equation.to_string()?);
+    let solution_string = equation.solution()?;
+    println!("{}", solution_string);
     Ok(())
 }
 
@@ -96,6 +118,8 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
 
     if Parser::is_question_tokens(&right_vec) {
         calculate(left_vec, &data_base)?;
+    } else if Parser::is_solution_equation(&right_vec) {
+        solution_equation(left_vec, right_vec, data_base)?;
     } else if Parser::is_variable_register(&left_vec) {
         register(left_vec, right_vec, data_base)?;
     } else if Parser::is_func_register(&left_vec) {

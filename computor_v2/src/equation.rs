@@ -287,7 +287,7 @@ impl Equation {
         v - int_v as f64 == 0.0
     }
 
-    fn to_string(&self) -> Result<String, String> {
+    pub fn to_string(&self) -> Result<String, String> {
         let mut string = String::new();
         for (i, term) in self.expr.iter().enumerate() {
             if i > 0 {
@@ -343,7 +343,7 @@ mod tests {
         };
         match parser.calculation(&mut tree, &data_base, None) {
             Ok(_) => {}
-            Err(e) =>return  Err(format!("error calculation: {}", e))
+            Err(e) => return Err(format!("error calculation: {}", e))
         }
         Ok(tree)
     }

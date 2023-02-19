@@ -67,6 +67,10 @@ impl Parser {
         tokens.len() == 1 && tokens[0] == Token::Question
     }
 
+    pub fn is_solution_equation(tokens: &Vec<Token>) -> bool {
+        tokens.len() > 0 && tokens.last() == Some(&Token::Question)
+    }
+
     pub fn is_variable_register(tokens: &Vec<Token>) -> bool {
         tokens.len() == 1 && if let Token::String(_) = tokens[0] {true} else {false}
     }
