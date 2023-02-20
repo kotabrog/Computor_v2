@@ -9,6 +9,7 @@ mod operator;
 mod equation;
 mod solution;
 mod command;
+mod functions;
 
 use lexer::{Lexer, Token};
 use parser::Parser;

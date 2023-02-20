@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use crate::num::Num;
 use crate::binary_tree::BinaryTree;
 use crate::parser::{Parser, Element};
+use crate::functions;
 
 
 #[derive(Debug, PartialEq)]
 pub enum Data {
     Num(Num),
-    Func(Box<(BinaryTree<Element>, String)>)
+    Func(Box<(BinaryTree<Element>, String)>),
 }
 
 
@@ -22,7 +23,7 @@ pub struct DataBase {
 impl DataBase {
     pub fn new() -> DataBase {
         let mut built_in = HashMap::new();
-        built_in.insert("sample".to_string(), Data::Func(Box::new((BinaryTree::from_element(Element::Variable(Box::new("x".to_string()))), "x".to_string()))));
+        built_in.insert("exp".to_string(), Data::Func(functions::make_builtin_func_box("exp".to_string())));
         DataBase { data: HashMap::new(), built_in }
     }
 
@@ -67,6 +68,17 @@ impl DataBase {
 
     pub fn get_func(&self, name: &String) -> Option<&Box<(BinaryTree<Element>, String)>> {
         let data = match self.get(name) {
+            Some(d) => d,
+            None => return None,
+        };
+        match data {
+            Data::Num(_) => None,
+            Data::Func(f) => Some(f),
+        }
+    }
+
+    pub fn get_builtin_func(&self, name: &String) -> Option<&Box<(BinaryTree<Element>, String)>> {
+        let data = match self.built_in.get(name) {
             Some(d) => d,
             None => return None,
         };

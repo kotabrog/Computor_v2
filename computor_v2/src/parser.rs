@@ -3,6 +3,7 @@ use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
 use crate::operator::Operator;
 use crate::data_base::{DataBase, Data};
+use crate::functions::builtin_func;
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -612,14 +613,33 @@ impl Parser {
                         }
                     },
                     Element::Func(string_box) => {
+                        match data_base.get_builtin_func(string_box) {
+                            None => {},
+                            Some(b) => {
+                                let mut func_tree = b.0.clone();
+                                let variable = b.1.clone();
+                                let function_name = *string_box.clone();
+                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
+                                    None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
+                                    Some(num) => return Ok(Some(builtin_func(function_name, &num)?)),
+                                };
+                                match self.calculation(&mut func_tree.left_mut().unwrap(), data_base, Some((&variable, Some(&left_value))))? {
+                                    None => {
+                                        *tree = func_tree;
+                                        return Ok(None)
+                                    },
+                                    Some(_) => return Err(format!("syntax error")),
+                                }
+                            }
+                        }
                         match data_base.get_func(string_box) {
                             None => return Ok(None),
                             Some(b) => {
                                 let mut func_tree = b.0.clone();
                                 let variable = b.1.clone();
                                 let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
-                                        None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
-                                        Some(num) => Data::Num(num),
+                                    None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
+                                    Some(num) => Data::Num(num),
                                 };
                                 match self.calculation(&mut func_tree, data_base, Some((&variable, Some(&left_value))))? {
                                     None => {
