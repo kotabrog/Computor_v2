@@ -84,7 +84,7 @@ fn register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBas
     };
 
     let key = Parser::get_string_token_string(&left_vec[0])?;
-    data_base.register_num(key, right_value);
+    data_base.register_num(key, right_value)?;
     let num = data_base.get_num(&key).unwrap();
     println!("{}", num.to_show_value_string());
     Ok(format!("{}", num))
@@ -109,7 +109,7 @@ fn func_register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut Da
         None => {},
     }
 
-    data_base.register_func(key, tree, variable.clone());
+    data_base.register_func(key, tree, variable.clone())?;
     let string = Parser::print_tree(&data_base.get_func(key).unwrap().0)?;
     println!("  {}", string);
     Ok(string)

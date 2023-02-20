@@ -38,13 +38,16 @@ impl Equation {
 
     fn degree_1_solution(&self) -> Result<String, String> {
         // ax + b = 0
-        let mut vec = Self::make_terms_no_gaps(&self.expr, self.degree);
+        let vec = Self::make_terms_no_gaps(&self.expr, self.degree);
         let a = vec[1].coefficient;
         let b = - vec[0].coefficient;
-        let value = b / a;
+        let mut value = b / a;
         if !value.is_finite() {
             Err(format!("The calculation resulted in '{}'.", value))
         } else {
+            if value == 0.0 {
+                value = 0.0;
+            }
             Ok(format!("Solution:\n{}", value))
         }
     }

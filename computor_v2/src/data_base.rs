@@ -15,27 +15,43 @@ pub enum Data {
 #[derive(Debug, PartialEq)]
 pub struct DataBase {
     data: HashMap<String, Data>,
+    built_in: HashMap<String, Data>,
 }
 
 
 impl DataBase {
     pub fn new() -> DataBase {
-        DataBase {data: HashMap::new()}
+        let mut built_in = HashMap::new();
+        built_in.insert("sample".to_string(), Data::Func(Box::new((BinaryTree::from_element(Element::Variable(Box::new("x".to_string()))), "x".to_string()))));
+        DataBase { data: HashMap::new(), built_in }
     }
 
-    pub fn register_num(&mut self, name: &String, num: Num) {
+    pub fn register_num(&mut self, name: &String, num: Num) -> Result<(), String> {
         let name = name.as_str().to_lowercase();
+        match self.built_in.get(&name) {
+            None => {},
+            Some(_) => return Err("The variable cannot be registered".to_string())
+        }
         self.data.insert(name, Data::Num(num));
+        Ok(())
     }
 
-    pub fn register_func(&mut self, name: &String, tree: BinaryTree<Element>, variable: String) {
+    pub fn register_func(&mut self, name: &String, tree: BinaryTree<Element>, variable: String) -> Result<(), String> {
         let name = name.as_str().to_lowercase();
+        match self.built_in.get(&name) {
+            None => {},
+            Some(_) => return Err("The function cannot be registered".to_string())
+        }
         self.data.insert(name, Data::Func(Box::new((tree, variable))));
+        Ok(())
     }
 
     pub fn get(&self, name: &String) -> Option<&Data> {
         let name = name.as_str().to_lowercase();
-        self.data.get(&name)
+        match self.built_in.get(&name) {
+            Some(data) => Some(&data),
+            None => self.data.get(&name),
+        }
     }
 
     pub fn get_num(&self, name: &String) -> Option<&Num> {

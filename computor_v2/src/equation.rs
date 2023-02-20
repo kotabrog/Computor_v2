@@ -351,9 +351,9 @@ mod tests {
     fn make_equation_test(code1: String, code2: String) -> Result<Equation, String> {
         let mut data_base = DataBase::new();
         let name = "a".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0))?;
         let name = "b".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0))?;
 
         let tree1 = prepare_tree(code1, &data_base)?;
         let tree2 = prepare_tree(code2, &data_base)?;

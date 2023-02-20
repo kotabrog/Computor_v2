@@ -825,11 +825,11 @@ mod tests {
         };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0))?;
         let name = "y".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0))?;
         let name = "z".to_string();
-        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0))?;
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -874,11 +874,11 @@ mod tests {
         };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0)).unwrap();
         let name = "y".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0)).unwrap();
         let name = "z".to_string();
-        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0)).unwrap();
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -903,11 +903,11 @@ mod tests {
         };
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0)).unwrap();
         let name = "y".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0)).unwrap();
         let name = "z".to_string();
-        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0)).unwrap();
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
             Ok(v) => v,
@@ -933,11 +933,11 @@ mod tests {
     fn function_calculation_test(function: String, function_name: String, variable: String, code: String) -> Result<Num, String> {
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0)).unwrap();
         let name = "y".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0)).unwrap();
         let name = "z".to_string();
-        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0)).unwrap();
 
         let mut lexer = Lexer::new(&function);
         let vec = lexer.make_token_vec()?;
@@ -958,7 +958,7 @@ mod tests {
             },
             None => {},
         }
-        data_base.register_func(&function_name, tree, variable.clone());
+        data_base.register_func(&function_name, tree, variable.clone())?;
 
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
@@ -980,11 +980,11 @@ mod tests {
     fn function_calculation_tree_test(function: String, function_name: String, variable: String, code: String) -> Result<String, String> {
         let mut data_base = DataBase::new();
         let name = "x".to_string();
-        data_base.register_num(&name, Num::Float(2.0));
+        data_base.register_num(&name, Num::Float(2.0)).unwrap();
         let name = "y".to_string();
-        data_base.register_num(&name, Num::Float(-2.0));
+        data_base.register_num(&name, Num::Float(-2.0)).unwrap();
         let name = "z".to_string();
-        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0)).unwrap();
 
         let mut lexer = Lexer::new(&function);
         let vec = lexer.make_token_vec()?;
@@ -1005,7 +1005,7 @@ mod tests {
             },
             None => {},
         }
-        data_base.register_func(&function_name, tree, variable.clone());
+        data_base.register_func(&function_name, tree, variable.clone())?;
 
         let mut parser = Parser::new(vec);
         let mut tree = match parser.make_tree(&data_base) {
