@@ -23,8 +23,13 @@ pub struct DataBase {
 impl DataBase {
     pub fn new() -> DataBase {
         let mut built_in = HashMap::new();
-        built_in.insert("exp".to_string(), Data::Func(functions::make_builtin_func_box("exp".to_string())));
+        Self::built_in_insert(&mut built_in, "exp".to_string());
+        Self::built_in_insert(&mut built_in, "sqrt".to_string());
         DataBase { data: HashMap::new(), built_in }
+    }
+
+    fn built_in_insert(built_in: &mut HashMap<String, Data>, func_name: String) {
+        built_in.insert(func_name.clone(), Data::Func(functions::make_builtin_func_box(func_name)));
     }
 
     pub fn register_num(&mut self, name: &String, num: Num) -> Result<(), String> {

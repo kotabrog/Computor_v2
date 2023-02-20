@@ -17,17 +17,35 @@ pub fn make_builtin_func_box(func_name: String) -> Box<(BinaryTree<Element>, Str
 
 
 pub fn builtin_func(func_name: String, num: &Num) -> Result<Num, String> {
-    if func_name == "exp" {
-        exp(num)
+    let n = if func_name == "exp" {
+        exp(num)?
+    } else if func_name == "sqrt" {
+        sqrt(num)?
     } else {
-        Err(format!("error: unsupported {}", func_name))
-    }
+        return Err(format!("error: unsupported {}", func_name))
+    };
+    n.checked_value()?;
+    Ok(n)
 }
 
 
 fn exp(num: &Num) -> Result<Num, String> {
     match num {
         Num::Float(n) => Ok(Num::Float(n.exp())),
+        _ => Err(format!("error: unsupported non float exp"))
+    }
+}
+
+
+fn sqrt(num: &Num) -> Result<Num, String> {
+    match num {
+        Num::Float(n) => {
+            if n.is_sign_positive() || *n == 0.0 {
+                Ok(Num::Float(n.sqrt()))
+            } else {
+                Ok(Num::from_two_float(0.0, n.abs().sqrt()))
+            }
+        }
         _ => Err(format!("error: unsupported non float exp"))
     }
 }
