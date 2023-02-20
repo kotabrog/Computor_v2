@@ -2,7 +2,7 @@ use crate::num::Num;
 use crate::binary_tree::BinaryTree;
 use crate::lexer::Token;
 use crate::operator::Operator;
-use crate::data_base::DataBase;
+use crate::data_base::{DataBase, Data};
 
 
 #[derive(Debug, PartialEq, Clone)]
@@ -570,7 +570,7 @@ impl Parser {
         }
     }
 
-    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, Option<&Num>)>) -> Result<Option<Num>, String> {
+    pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, Option<&Data>)>) -> Result<Option<Num>, String> {
         match &tree {
             BinaryTree::Empty => return Err(format!("syntax error")),
             BinaryTree::NonEmpty(node_box) => {
@@ -582,10 +582,16 @@ impl Parser {
                     Element::Num(n) => return Ok(Some(n.clone())),
                     Element::Dummy => return Ok(Some(Num::Float(0.0))),
                     Element::Variable(string_box) => {
-                        if let Some((key, num)) = local_variable {
+                        if let Some((key, data)) = local_variable {
                             if *key == **string_box {
-                                match num {
-                                    Some(n) => return Ok(Some(n.clone())),
+                                match data {
+                                    Some(d) => match d {
+                                        Data::Num(n) => return Ok(Some(n.clone())),
+                                        Data::Func(f) => {
+                                            *tree = f.0.clone();
+                                            return Ok(None)
+                                        },
+                                    },
                                     None => return Ok(None)
                                 }
                             }
@@ -604,13 +610,19 @@ impl Parser {
                             Some(b) => {
                                 let mut func_tree = b.0.clone();
                                 let variable = b.1.clone();
-                                let func_name = string_box.clone();
                                 let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
-                                        None => return Err(format!("{}: error: Could not expand function contents", func_name)),
-                                        Some(num) => num,
+                                        None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
+                                        Some(num) => Data::Num(num),
                                 };
                                 match self.calculation(&mut func_tree, data_base, Some((&variable, Some(&left_value))))? {
-                                    None => return Err(format!("{}: function error", func_name)),
+                                    None => {
+                                        *tree = BinaryTree::from_element_and_tree(
+                                            Element::Operator(Operator::Paren),
+                                            func_tree,
+                                            BinaryTree::from_element(Element::Operator(Operator::RParen)),
+                                        );
+                                        return Ok(None)
+                                    },
                                     Some(num) => {
                                         *tree = BinaryTree::from_element(Element::Num(num.clone()));
                                         return Ok(Some(num))
@@ -910,7 +922,7 @@ mod tests {
         }
     }
 
-    
+
     fn function_calculation_test(function: String, function_name: String, variable: String, code: String) -> Result<Num, String> {
         let mut data_base = DataBase::new();
         let name = "x".to_string();
@@ -954,6 +966,52 @@ mod tests {
                 }
             },
             Err(e) => Err(format!("error calculation: {}", e))
+        }
+    }
+
+
+    fn function_calculation_tree_test(function: String, function_name: String, variable: String, code: String) -> Result<String, String> {
+        let mut data_base = DataBase::new();
+        let name = "x".to_string();
+        data_base.register_num(&name, Num::Float(2.0));
+        let name = "y".to_string();
+        data_base.register_num(&name, Num::Float(-2.0));
+        let name = "z".to_string();
+        data_base.register_num(&name, Num::from_two_float_to_complex(-1.0, -3.0));
+
+        let mut lexer = Lexer::new(&function);
+        let vec = lexer.make_token_vec()?;
+        let mut parser = Parser::new(vec);
+        let mut tree = parser.make_tree(&data_base)?;
+        parser.calculation(&mut tree, &data_base, Some((&variable, None)))?;
+
+        let mut lexer = Lexer::new(&code);
+        let vec = match lexer.make_token_vec() {
+            Ok(v) => v,
+            Err(e) => return Err(format!("error lexer: {}", e))
+        };
+        match Parser::check_variable_in_tree(&tree)? {
+            Some(var) => {
+                if var != *variable {
+                    return Err(format!("{}, {}: error two variable", var, variable))
+                }
+            },
+            None => {},
+        }
+        data_base.register_func(&function_name, tree, variable.clone());
+
+        let mut parser = Parser::new(vec);
+        let mut tree = match parser.make_tree(&data_base) {
+            Ok(v) => v,
+            Err(e) => return Err(format!("error parser: {}", e))
+        };
+        match parser.calculation(&mut tree, &data_base, None) {
+            Ok(_) => {},
+            Err(e) => return Err(format!("error calculation: {}", e))
+        }
+        match Parser::print_tree(&tree) {
+            Ok(s) => Ok(s),
+            Err(e) => Err(format!("error print_tree: {}", e)),
         }
     }
 
@@ -1648,15 +1706,6 @@ mod tests {
     }
 
     #[test]
-    fn calculation_error_function_not_calc() {
-        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
-        let function_name = "func".to_string();
-        let variable = "x".to_string();
-        let code = "func(a)".to_string();
-        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation: func: error: Could not expand function contents".to_string()))
-    }
-
-    #[test]
     fn calculation_error_function_not_func() {
         let function = "1 - x".to_string();
         let function_name = "f".to_string();
@@ -1681,5 +1730,15 @@ mod tests {
         let variable = "x".to_string();
         let code = "func(2)".to_string();
         assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation: Unsupported operator (i) ^ (2)".to_string()))
+    }
+
+    #[test]
+    fn calculation_function_tree_variable() {
+        let function = "(x + 2)^2 - 2 * x - 2 + (-2)^x".to_string();
+        let function_name = "func".to_string();
+        let variable = "x".to_string();
+        let code = "func(a)".to_string();
+        let ans = "( ( ( a ) + 2 ) ^ 2 - 2 * ( a ) - 2 + ( -2 ) ^ ( a ) )".to_string();
+        assert_eq!(function_calculation_tree_test(function, function_name, variable, code), Ok(ans))
     }
 }
