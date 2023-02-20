@@ -39,6 +39,13 @@ impl Parser {
         }
     }
 
+    pub fn is_show_commands(tokens: &Vec<Token>) -> bool {
+        tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
+            Ok(s) => s == "history",
+            Err(_) => false
+        }
+    }
+
     pub fn separate_equal(tokens: Vec<Token>) -> Result<(Vec<Token>, Vec<Token>), String> {
         let mut left_vec = Vec::new();
         let mut right_vec = Vec::new();

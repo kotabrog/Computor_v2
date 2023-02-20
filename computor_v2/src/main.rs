@@ -8,28 +8,37 @@ mod data_base;
 mod operator;
 mod equation;
 mod solution;
+mod command;
 
 use lexer::{Lexer, Token};
 use parser::Parser;
 use data_base::DataBase;
 use equation::Equation;
+use command::Commands;
 
 
-fn show_variable(data_base: &DataBase) -> Result<(), String> {
+fn show_variable(data_base: &DataBase) -> Result<String, String> {
     let string = data_base.show_variable();
     print!("{}", string);
-    Ok(())
+    Ok(format!(""))
 }
 
 
-fn show_function(data_base: &DataBase) -> Result<(), String> {
+fn show_function(data_base: &DataBase) -> Result<String, String> {
     let string = data_base.show_function()?;
     print!("{}", string);
-    Ok(())
+    Ok(format!(""))
 }
 
 
-fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<(), String> {
+fn show_commands(commands: &Commands) -> String {
+    let string = commands.show();
+    print!("{}", string);
+    format!("")
+}
+
+
+fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<String, String> {
     let mut parser = Parser::new(left_vec);
     let mut tree = parser.make_tree(data_base)?;
 
@@ -39,11 +48,11 @@ fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<(), String> {
         None => return Err(format!("Undefined Variables")),
     };
     println!("{}", left_value.to_show_value_string());
-    Ok(())
+    Ok(format!("{}", left_value))
 }
 
 
-fn solution_equation(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+fn solution_equation(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<String, String> {
     let mut parser = Parser::new(left_vec);
     let mut left_tree = parser.make_tree(data_base)?;
     parser.calculation(&mut left_tree, data_base, None)?;
@@ -56,14 +65,15 @@ fn solution_equation(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mu
 
     let mut equation = Equation::new();
     equation.make_equation(&left_tree, &right_tree)?;
-    println!("  {} = 0", equation.to_string()?);
+    let string = format!("  {} = 0\n", equation.to_string()?);
+    print!("{}", string);
     let solution_string = equation.solution()?;
     println!("{}", solution_string);
-    Ok(())
+    Ok(string + solution_string.as_str())
 }
 
 
-fn register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+fn register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<String, String> {
     let mut parser = Parser::new(right_vec);
     let mut tree = parser.make_tree(data_base)?;
 
@@ -77,11 +87,11 @@ fn register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBas
     data_base.register_num(key, right_value);
     let num = data_base.get_num(&key).unwrap();
     println!("{}", num.to_show_value_string());
-    Ok(())
+    Ok(format!("{}", num))
 }
 
 
-fn func_register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<(), String> {
+fn func_register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut DataBase) -> Result<String, String> {
     let key = Parser::get_string_token_string(&left_vec[0])?;
     let variable = Parser::get_string_token_string(&left_vec[2])?;
 
@@ -100,11 +110,13 @@ fn func_register(left_vec: Vec<Token>, right_vec: Vec<Token>, data_base: &mut Da
     }
 
     data_base.register_func(key, tree, variable.clone());
-    println!("  {}", Parser::print_tree(&data_base.get_func(key).unwrap().0)?);
-    Ok(())
+    let string = Parser::print_tree(&data_base.get_func(key).unwrap().0)?;
+    println!("  {}", string);
+    Ok(string)
 }
 
-fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
+
+fn compute(code: &String, data_base: &mut DataBase, commands: &Commands) -> Result<String, String> {
     let mut lexer = Lexer::new(&code);
     let vec = lexer.make_token_vec()?;
 
@@ -112,26 +124,30 @@ fn compute(code: String, data_base: &mut DataBase) -> Result<(), String> {
         return show_variable(&data_base)
     } else if Parser::is_show_functions(&vec) {
         return show_function(&data_base)
+    } else if Parser::is_show_commands(&vec) {
+        return Ok(show_commands(&commands))
     }
 
     let (left_vec, right_vec) = Parser::separate_equal(vec)?;
 
     if Parser::is_question_tokens(&right_vec) {
-        calculate(left_vec, &data_base)?;
+        calculate(left_vec, &data_base)
     } else if Parser::is_solution_equation(&right_vec) {
-        solution_equation(left_vec, right_vec, data_base)?;
+        solution_equation(left_vec, right_vec, data_base)
     } else if Parser::is_variable_register(&left_vec) {
-        register(left_vec, right_vec, data_base)?;
+        register(left_vec, right_vec, data_base)
     } else if Parser::is_func_register(&left_vec) {
-        func_register(left_vec, right_vec, data_base)?;
+        func_register(left_vec, right_vec, data_base)
     } else {
         println!("  {}", "Unsupported format");
+        Ok("Unsupported format".to_string())
     }
-    Ok(())
 }
+
 
 fn interpreter() {
     let mut data_base = DataBase::new();
+    let mut commands = Commands::new();
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -146,10 +162,14 @@ fn interpreter() {
             break;
         }
 
-        match compute(code, &mut data_base) {
-            Err(e) => println!("  {}", e),
-            _ => {},
-        }
+        let result = match compute(&code, &mut data_base, &commands) {
+            Err(e) => {
+                println!("  {}", e);
+                e
+            },
+            Ok(s) => s,
+        };
+        commands.push(code, result);
     }
 }
 
