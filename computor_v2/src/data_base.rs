@@ -25,6 +25,11 @@ impl DataBase {
         let mut built_in = HashMap::new();
         Self::built_in_insert(&mut built_in, "exp".to_string());
         Self::built_in_insert(&mut built_in, "sqrt".to_string());
+        Self::built_in_insert(&mut built_in, "abs".to_string());
+        Self::built_in_insert(&mut built_in, "sin".to_string());
+        Self::built_in_insert(&mut built_in, "cos".to_string());
+        Self::built_in_insert(&mut built_in, "tan".to_string());
+        built_in.insert("pi".to_string(), Data::Num(Num::Float(std::f64::consts::PI)));
         DataBase { data: HashMap::new(), built_in }
     }
 

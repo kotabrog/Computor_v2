@@ -21,6 +21,14 @@ pub fn builtin_func(func_name: String, num: &Num) -> Result<Num, String> {
         exp(num)?
     } else if func_name == "sqrt" {
         sqrt(num)?
+    } else if func_name == "abs" {
+        abs(num)?
+    } else if func_name == "sin" {
+        sin(num)?
+    } else if func_name == "cos" {
+        cos(num)?
+    } else if func_name == "tan" {
+        tan(num)?
     } else {
         return Err(format!("error: unsupported {}", func_name))
     };
@@ -46,6 +54,38 @@ fn sqrt(num: &Num) -> Result<Num, String> {
                 Ok(Num::from_two_float(0.0, n.abs().sqrt()))
             }
         }
-        _ => Err(format!("error: unsupported non float exp"))
+        _ => Err(format!("error: unsupported non float sqrt"))
+    }
+}
+
+
+fn abs(num: &Num) -> Result<Num, String> {
+    match num {
+        Num::Float(n) => Ok(Num::Float(n.abs())),
+        _ => Err(format!("error: unsupported non float abs"))
+    }
+}
+
+
+fn sin(num: &Num) -> Result<Num, String> {
+    match num {
+        Num::Float(n) => Ok(Num::Float(n.sin())),
+        _ => Err(format!("error: unsupported non float sin"))
+    }
+}
+
+
+fn cos(num: &Num) -> Result<Num, String> {
+    match num {
+        Num::Float(n) => Ok(Num::Float(n.cos())),
+        _ => Err(format!("error: unsupported non float cos"))
+    }
+}
+
+
+fn tan(num: &Num) -> Result<Num, String> {
+    match num {
+        Num::Float(n) => Ok(Num::Float(n.tan())),
+        _ => Err(format!("error: unsupported non float tan"))
     }
 }
