@@ -621,14 +621,23 @@ impl Parser {
                                 let function_name = *string_box.clone();
                                 let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, local_variable)? {
                                     None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
-                                    Some(num) => return Ok(Some(builtin_func(function_name, &num)?)),
+                                    Some(num) => Data::Num(num),
                                 };
-                                match self.calculation(&mut func_tree.left_mut().unwrap(), data_base, Some((&variable, Some(&left_value))))? {
-                                    None => {
-                                        *tree = func_tree;
-                                        return Ok(None)
+                                match left_value {
+                                    Data::Num(n) => {
+                                        let n = builtin_func(function_name, &n)?;
+                                        *tree = BinaryTree::from_element(Element::Num(n.clone()));
+                                        return Ok(Some(n))
                                     },
-                                    Some(_) => return Err(format!("syntax error")),
+                                    Data::Func(_) => {
+                                        match self.calculation(&mut func_tree.left_mut().unwrap(), data_base, Some((&variable, Some(&left_value))))? {
+                                            None => {
+                                                *tree = func_tree;
+                                                return Ok(None)
+                                            },
+                                            Some(_) => return Err(format!("syntax error")),
+                                        }
+                                    }
                                 }
                             }
                         }
