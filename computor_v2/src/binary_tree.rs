@@ -89,6 +89,7 @@ impl<T> BinaryTree<T> {
         std::mem::replace(&mut node_box.left, tree)
     }
 
+    #[allow(dead_code)]
     pub fn add_right_node_from_tree(&mut self, tree: Self) -> BinaryTree<T> {
         let node_box = match self {
             Self::Empty => {
@@ -100,14 +101,17 @@ impl<T> BinaryTree<T> {
         std::mem::replace(&mut node_box.right, tree)
     }
 
+    #[allow(dead_code)]
     pub fn add_left_node_from_node(&mut self, node: TreeNode<T>) -> BinaryTree<T> {
         self.add_left_node_from_tree(Self::from_node(node))
     }
 
+    #[allow(dead_code)]
     pub fn add_right_node_from_node(&mut self, node: TreeNode<T>) -> BinaryTree<T> {
         self.add_right_node_from_tree(Self::from_node(node))
     }
 
+    #[allow(dead_code)]
     pub fn add_left_node_from_element(&mut self, element: T) -> BinaryTree<T> {
         self.add_left_node_from_node(TreeNode {
             element,
@@ -116,6 +120,7 @@ impl<T> BinaryTree<T> {
         })
     }
 
+    #[allow(dead_code)]
     pub fn add_right_node_from_element(&mut self, element: T) -> BinaryTree<T> {
         self.add_right_node_from_node(TreeNode {
             element,
@@ -124,6 +129,7 @@ impl<T> BinaryTree<T> {
         })
     }
 
+    #[allow(dead_code)]
     pub fn delete_left_node(&mut self) -> BinaryTree<T> {
         let node_box = match self {
             Self::Empty => return Self::Empty,
@@ -132,6 +138,7 @@ impl<T> BinaryTree<T> {
         std::mem::replace(&mut node_box.left, BinaryTree::Empty)
     }
 
+    #[allow(dead_code)]
     pub fn delete_right_node(&mut self) -> BinaryTree<T> {
         let node_box = match self {
             Self::Empty => return Self::Empty,

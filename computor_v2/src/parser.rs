@@ -619,7 +619,7 @@ impl Parser {
                                 let mut func_tree = b.0.clone();
                                 let variable = b.1.clone();
                                 let function_name = *string_box.clone();
-                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
+                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, local_variable)? {
                                     None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
                                     Some(num) => return Ok(Some(builtin_func(function_name, &num)?)),
                                 };
@@ -637,7 +637,7 @@ impl Parser {
                             Some(b) => {
                                 let mut func_tree = b.0.clone();
                                 let variable = b.1.clone();
-                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, None)? {
+                                let left_value = match self.calculation(tree.left_mut().unwrap(), data_base, local_variable)? {
                                     None => Data::Func(Box::new((tree.left().unwrap().clone(), variable.clone()))),
                                     Some(num) => Data::Num(num),
                                 };
@@ -809,9 +809,8 @@ impl Parser {
                     _ => None
                 };
                 let var = match &node_box.element {
-                    Element::Dummy | Element::Num(_) | Element::Operator(_) => None,
+                    Element::Dummy | Element::Num(_) | Element::Operator(_) | Element::Func(_) => None,
                     Element::Variable(v) => Some(v),
-                    Element::Func(v) => return Err(format!("{}: error function", v))
                 };
                 let variable = match (variable, var) {
                     (Some(string1), Some(string2)) => {
@@ -1538,6 +1537,12 @@ mod tests {
     fn calculation_error_variable_not_found() {
         let code = "2a + 1".to_string();
         assert_eq!(calculation_test(code), Err("error calculation".to_string()))
+    }
+
+    #[test]
+    fn calculation_built_in_func() {
+        let code = "cos(2pi)".to_string();
+        assert_eq!(calculation_test(code), Ok(Num::Float(1.0)))
     }
 
     #[test]

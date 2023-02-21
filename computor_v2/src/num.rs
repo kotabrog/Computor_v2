@@ -96,7 +96,7 @@ impl Matrix {
         Some(Matrix { elem, size: (horizontal_len, vertical_len) })
     }
 
-
+    #[allow(dead_code)]
     pub fn at(&self, row: usize, col: usize) -> Option<f64> {
         if row >= self.size.0 || col >= self.size.1 {
             None
@@ -106,6 +106,7 @@ impl Matrix {
     }
 
 
+    #[allow(dead_code)]
     pub fn at_mut(&mut self, row: usize, col: usize) -> Option<&mut f64> {
         if row >= self.size.0 || col >= self.size.1 {
             None
@@ -115,6 +116,7 @@ impl Matrix {
     }
 
 
+    #[allow(dead_code)]
     pub fn size(&self) -> &(usize, usize) {
         &self.size
     }

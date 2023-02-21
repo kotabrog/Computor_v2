@@ -44,12 +44,18 @@ fn calculate(left_vec: Vec<Token>, data_base: &DataBase) -> Result<String, Strin
     let mut tree = parser.make_tree(data_base)?;
 
     let left_value = parser.calculation(&mut tree, data_base, None)?;
-    let left_value = match left_value {
-        Some(v) => v,
-        None => return Err(format!("Undefined Variables")),
+    let string = match left_value {
+        Some(v) => {
+            println!("{}", v.to_show_value_string());
+            format!("{}", v)
+        },
+        None => {
+            let s = Parser::print_tree(&tree)?;
+            println!("  {}", s);
+            s
+        },
     };
-    println!("{}", left_value.to_show_value_string());
-    Ok(format!("{}", left_value))
+    Ok(string)
 }
 
 

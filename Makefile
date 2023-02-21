@@ -16,7 +16,7 @@ clean:
 	@cd computor_v2 && cargo clean
 
 fclean: clean
-	@rm ./computor
+	@rm -f ./$(NAME)
 
 re: fclean all
 
