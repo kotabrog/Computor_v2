@@ -1765,12 +1765,12 @@ mod tests {
     }
 
     #[test]
-    fn calculation_error_function_unsupported_op_complex() {
+    fn calculation_function_complex_pow() {
         let function = "1 - i ^ x".to_string();
         let function_name = "func".to_string();
         let variable = "x".to_string();
         let code = "func(2)".to_string();
-        assert_eq!(function_calculation_test(function, function_name, variable, code), Err("error calculation: Unsupported operator (i) ^ (2)".to_string()))
+        assert_eq!(function_calculation_test(function, function_name, variable, code), Ok(Num::Float(2.0)))
     }
 
     #[test]

@@ -1,6 +1,9 @@
 use std::fmt;
 
 
+const MAX_POW: usize = 1000;
+
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Complex {
     pub r: f64,
@@ -393,6 +396,25 @@ impl Num {
             (Num::Float(l), Num::Float(r)) => {
                 Ok(Num::Float(l.powf(*r)))
             },
+            (Num::Complex(l), Num::Float(r)) => {
+                if !Self::is_int_value(*r) || (*r != 0.0 && r.is_sign_negative()) {
+                    Err(format!("Unsupported operator ({}) ^ ({})", self, rhs))
+                } else {
+                    let pow = *r as usize;
+                    if pow == 0 {
+                        Ok(Num::Float(1.0))
+                    } else if pow > MAX_POW {
+                        Err(format!("Unsupported operator ({}) ^ ({})", self, rhs))
+                    } else {
+                        let mut num = Num::from_two_float(l.r, l.z);
+                        for _ in 1..pow {
+                            num = num.supported_mul(&num)?;
+                            num.checked_value()?;
+                        }
+                        Ok(num)
+                    }
+                }
+            },
             _ => Err(format!("Unsupported operator ({}) ^ ({})", self, rhs))
         }
     }
@@ -447,6 +469,11 @@ impl Num {
             Num::Matrix(m) => m.to_string_rich(),
             _ => format!("  {}", self),
         }
+    }
+
+    pub fn is_int_value(v: f64) -> bool {
+        let int_v = v as i64;
+        v - int_v as f64 == 0.0
     }
 }
 
@@ -1142,11 +1169,35 @@ mod tests {
     }
 
     #[test]
-    fn supported_pow_error_complex_float() {
-        let lhs = Num::Float(0.0);
-        let rhs = Num::from_two_float(2.0, 3.0);
+    fn supported_pow_complex_float_zero() {
+        let lhs = Num::from_two_float(2.0, 3.0);
+        let rhs = Num::Float(0.0);
         assert_eq!(lhs.supported_pow(&rhs),
-                   Err(format!("Unsupported operator ({}) ^ ({})", lhs, rhs)));
+                    Ok(Num::Float(1.0)));
+    }
+
+    #[test]
+    fn supported_pow_complex_float() {
+        let lhs = Num::from_two_float(2.0, 3.0);
+        let rhs = Num::Float(2.0);
+        assert_eq!(lhs.supported_pow(&rhs),
+                    Ok(Num::from_two_float(-5.0, 12.0)));
+    }
+
+    #[test]
+    fn supported_pow_error_complex_float_max() {
+        let lhs = Num::from_two_float(2.0, 3.0);
+        let rhs = Num::Float(1001.0);
+        assert_eq!(lhs.supported_pow(&rhs),
+            Err(format!("Unsupported operator ({}) ^ ({})", lhs, rhs)));
+    }
+
+    #[test]
+    fn supported_pow_error_complex_float_non_integer() {
+        let lhs = Num::from_two_float(2.0, 3.0);
+        let rhs = Num::Float(2.5);
+        assert_eq!(lhs.supported_pow(&rhs),
+            Err(format!("Unsupported operator ({}) ^ ({})", lhs, rhs)));
     }
 
     #[test]

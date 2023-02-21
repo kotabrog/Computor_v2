@@ -231,7 +231,7 @@ impl Equation {
         }
         if expr_right.len() != 1
                 || expr_right[0].degree != 0
-                || !Self::is_int_value(expr_right[0].coefficient)
+                || !Num::is_int_value(expr_right[0].coefficient)
                 || (expr_right[0].coefficient.is_sign_negative() && expr_right[0].coefficient != 0.0) {
             return Err(format!("error: only integers greater than or equal to 0 are allowed for exponents"))
         }
@@ -280,11 +280,6 @@ impl Equation {
         let mut vec: Vec<Term> = terms.into_values().collect();
         vec.sort_by(|a, b| a.degree.cmp(&b.degree));
         Ok(vec)
-    }
-
-    fn is_int_value(v: f64) -> bool {
-        let int_v = v as i64;
-        v - int_v as f64 == 0.0
     }
 
     pub fn to_string(&self) -> Result<String, String> {
