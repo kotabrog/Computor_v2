@@ -109,6 +109,16 @@ impl Parser {
         }
     }
 
+    fn string_to_num(string: &String) -> Result<Num, String> {
+        let num = Num::from_string_to_float(string)?;
+        num.checked_value()?;
+        Ok(num)
+    }
+
+    fn get_next_token_to_num(&self) -> Result<Num, String> {
+        Ok(Num::Float(Self::get_num_token_float(self.get_next_token()?)?))
+    }
+
     pub fn make_tree(&mut self, data_base: &DataBase) -> Result<BinaryTree<Element>, String> {
         let mut tree = BinaryTree::new();
         self.root_tree_loop(&mut tree, data_base)?;
@@ -183,7 +193,7 @@ impl Parser {
         }
     }
 
-    fn get_next_token(&mut self) -> Result<&Token, String> {
+    fn get_next_token(&self) -> Result<&Token, String> {
         match self.tokens.get(self.index) {
             Some(v) => {
                 Ok(v)
@@ -208,33 +218,28 @@ impl Parser {
     fn next_token(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<bool, String> {
         let token = self.get_next_token()?;
         match token {
-            Token::NumString(s) => {
-                let num = Self::string_to_num(s)?;
-                self.add_num(tree, num)?;
-                self.index_plus();
-            },
-            Token::I => return self.add_complex(tree),
-            Token::Plus => return self.add_operator(tree, Operator::Plus, data_base),
-            Token::Minus => return self.add_operator(tree, Operator::Minus, data_base),
-            Token::Asterisk => return self.add_operator(tree, Operator::Mul, data_base),
-            Token::Slash => return self.add_operator(tree, Operator::Div, data_base),
-            Token::Percent => return self.add_operator(tree, Operator::Rem, data_base),
-            Token::Caret => return self.add_operator(tree, Operator::Pow, data_base),
-            Token::TwoAsterisk => return self.add_operator(tree, Operator::MatrixMul, data_base),
-            Token::LParen => return self.add_paren(tree, data_base),
-            Token::LBracket => return self.add_matrix(tree),
-            Token::RParen => return Ok(true),
+            Token::NumString(_) => self.add_num(tree),
+            Token::I => self.add_complex(tree),
+            Token::Plus => self.add_operator(tree, Operator::Plus, data_base),
+            Token::Minus => self.add_operator(tree, Operator::Minus, data_base),
+            Token::Asterisk => self.add_operator(tree, Operator::Mul, data_base),
+            Token::Slash => self.add_operator(tree, Operator::Div, data_base),
+            Token::Percent => self.add_operator(tree, Operator::Rem, data_base),
+            Token::Caret => self.add_operator(tree, Operator::Pow, data_base),
+            Token::TwoAsterisk => self.add_operator(tree, Operator::MatrixMul, data_base),
+            Token::LParen => self.add_paren(tree, data_base),
+            Token::LBracket => self.add_matrix(tree),
+            Token::RParen => Ok(true),
             Token::String(s) => {
                 let string_box = s.clone();
                 if Self::is_function(&string_box, data_base) {
-                    return self.add_function(tree, string_box, data_base)
+                    self.add_function(tree, string_box, data_base)
                 } else {
-                    return self.add_variable(tree, string_box)
+                    self.add_variable(tree, string_box)
                 }
             },
-            _ => return Err(format!("syntax error")),
+            _ => Err(format!("syntax error")),
         }
-        Ok(false)
     }
 
     fn is_function(string_box: &Box<String>, data_base: &DataBase) -> bool {
@@ -244,13 +249,9 @@ impl Parser {
         }
     }
 
-    fn string_to_num(string: &String) -> Result<Num, String> {
-        let num = Num::from_string_to_float(string)?;
-        num.checked_value()?;
-        Ok(num)
-    }
 
-    fn add_num(&mut self, tree: &mut BinaryTree<Element>, num: Num) -> Result<(), String> {
+    fn add_num(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
+        let num = self.get_next_token_to_num()?;
         let next_tree = match tree {
             BinaryTree::Empty => tree,
             BinaryTree::NonEmpty(node_box) => {
@@ -273,7 +274,8 @@ impl Parser {
             }
         };
         *next_tree = BinaryTree::from_element(Element::Num(num));
-        Ok(())
+        self.index_plus();
+        Ok(false)
     }
 
     fn add_complex(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
