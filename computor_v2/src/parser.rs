@@ -249,7 +249,6 @@ impl Parser {
         }
     }
 
-
     fn add_num(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
         let num = self.get_next_token_to_num()?;
         let next_tree = match tree {
@@ -279,24 +278,9 @@ impl Parser {
     }
 
     fn add_complex(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
-        let next_tree = match tree {
-            BinaryTree::Empty => tree,
-            BinaryTree::NonEmpty(node_box) => {
-                match node_box.element {
-                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
-                        self.insert_mul();
-                        return Ok(false)
-                    }
-                    Element::Dummy => return Err(format!("i: syntax error")),
-                    Element::Operator(_) => {
-                        if tree.right().unwrap().is_non_empty() {
-                            self.insert_mul();
-                            return Ok(false)
-                        }
-                    },
-                }
-                tree.right_mut().unwrap()
-            }
+        let next_tree = match self.is_next_tree_or_right_or_insert_mul(tree, "i".to_string())? {
+            Some(f) => if f {tree} else {tree.right_mut().unwrap()},
+            None => return Ok(false)
         };
         *next_tree = BinaryTree::from_element(Element::Num(Num::new_complex()));
         self.index_plus();
@@ -307,24 +291,9 @@ impl Parser {
     }
 
     fn add_matrix(&mut self, tree: &mut BinaryTree<Element>) -> Result<bool, String> {
-        let next_tree = match tree {
-            BinaryTree::Empty => tree,
-            BinaryTree::NonEmpty(node_box) => {
-                match node_box.element {
-                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
-                        self.insert_mul();
-                        return Ok(false)
-                    }
-                    Element::Dummy => return Err(format!("syntax error")),
-                    Element::Operator(_) => {
-                        if tree.right().unwrap().is_non_empty() {
-                            self.insert_mul();
-                            return Ok(false)
-                        }
-                    },
-                }
-                tree.right_mut().unwrap()
-            }
+        let next_tree = match self.is_next_tree_or_right_or_insert_mul(tree, "[".to_string())? {
+            Some(f) => if f {tree} else {tree.right_mut().unwrap()},
+            None => return Ok(false)
         };
         *next_tree = BinaryTree::from_element(Element::Num(self.token_to_matrix()?));
         if self.is_num() || self.is_string_token() {
@@ -485,24 +454,9 @@ impl Parser {
     }
 
     fn add_variable(&mut self, tree: &mut BinaryTree<Element>, string_box: Box<String>) -> Result<bool, String> {
-        let next_tree = match tree {
-            BinaryTree::Empty => tree,
-            BinaryTree::NonEmpty(node_box) => {
-                match node_box.element {
-                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
-                        self.insert_mul();
-                        return Ok(false)
-                    }
-                    Element::Dummy => return Err(format!("{}: syntax error", string_box)),
-                    Element::Operator(_) => {
-                        if tree.right().unwrap().is_non_empty() {
-                            self.insert_mul();
-                            return Ok(false)
-                        }
-                    },
-                }
-                tree.right_mut().unwrap()
-            }
+        let next_tree = match self.is_next_tree_or_right_or_insert_mul(tree, *string_box.clone())? {
+            Some(f) => if f {tree} else {tree.right_mut().unwrap()},
+            None => return Ok(false)
         };
         *next_tree = BinaryTree::from_element(Element::Variable(string_box));
         self.index_plus();
@@ -513,24 +467,9 @@ impl Parser {
     }
 
     fn add_function(&mut self, tree: &mut BinaryTree<Element>, string_box: Box<String>, data_base: &DataBase) -> Result<bool, String> {
-        let next_tree = match tree {
-            BinaryTree::Empty => tree,
-            BinaryTree::NonEmpty(node_box) => {
-                match node_box.element {
-                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
-                        self.insert_mul();
-                        return Ok(false)
-                    }
-                    Element::Dummy => return Err(format!("{}: syntax error", string_box)),
-                    Element::Operator(_) => {
-                        if tree.right().unwrap().is_non_empty() {
-                            self.insert_mul();
-                            return Ok(false)
-                        }
-                    },
-                }
-                tree.right_mut().unwrap()
-            }
+        let next_tree = match self.is_next_tree_or_right_or_insert_mul(tree, *string_box.clone())? {
+            Some(f) => if f {tree} else {tree.right_mut().unwrap()},
+            None => return Ok(false)
         };
         *next_tree = BinaryTree::from_element(Element::Func(string_box.clone()));
         self.index_plus();
@@ -541,6 +480,28 @@ impl Parser {
         self.add_paren(&mut paren_tree, data_base)?;
         *next_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
         Ok(false)
+    }
+
+    fn is_next_tree_or_right_or_insert_mul(&mut self, tree: &mut BinaryTree<Element>, error_string: String) -> Result<Option<bool>, String> {
+        match tree {
+            BinaryTree::Empty => Ok(Some(true)),
+            BinaryTree::NonEmpty(node_box) => {
+                match node_box.element {
+                    Element::Num(_) | Element::Variable(_) | Element::Func(_) => {
+                        self.insert_mul();
+                        return Ok(None)
+                    }
+                    Element::Dummy => return Err(format!("{}: syntax error", error_string)),
+                    Element::Operator(_) => {
+                        if tree.right().unwrap().is_non_empty() {
+                            self.insert_mul();
+                            return Ok(None)
+                        }
+                    },
+                }
+                Ok(Some(false))
+            }
+        }
     }
 
     fn insert_mul(&mut self) {
