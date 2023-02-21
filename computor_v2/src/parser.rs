@@ -26,25 +26,23 @@ impl Parser {
         Parser { tokens, index: 0 }
     }
 
-    pub fn is_show_variable(tokens: &Vec<Token>) -> bool {
+    fn is_onw_command(tokens: &Vec<Token>, string: String) -> bool {
         tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
-            Ok(s) => s == "variables",
+            Ok(s) => *s == string,
             Err(_) => false
         }
+    }
+
+    pub fn is_show_variable(tokens: &Vec<Token>) -> bool {
+        Self::is_onw_command(tokens, "variables".to_string())
     }
 
     pub fn is_show_functions(tokens: &Vec<Token>) -> bool {
-        tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
-            Ok(s) => s == "functions",
-            Err(_) => false
-        }
+        Self::is_onw_command(tokens, "functions".to_string())
     }
 
     pub fn is_show_commands(tokens: &Vec<Token>) -> bool {
-        tokens.len() == 1 && match Self::get_string_token_string(&tokens[0]) {
-            Ok(s) => s == "history",
-            Err(_) => false
-        }
+        Self::is_onw_command(tokens, "history".to_string())
     }
 
     pub fn separate_equal(tokens: Vec<Token>) -> Result<(Vec<Token>, Vec<Token>), String> {
