@@ -131,7 +131,7 @@ impl Parser {
     fn root_tree_loop(&mut self, tree: &mut BinaryTree<Element>, data_base: &DataBase) -> Result<(), String> {
         while self.index < self.tokens.len() {
             self.search_add_point(tree, data_base)?;
-            if self.is_r_paren() {
+            if self.is_next_token(Token::RParen) {
                 break
             }
         }
@@ -257,7 +257,7 @@ impl Parser {
             BinaryTree::NonEmpty(node_box) => {
                 match node_box.element {
                     Element::Num(_) | Element::Dummy | Element::Variable(_) | Element::Func(_)
-                        => return Err(format!("{:?}: syntax error", num)),
+                        => return Err(format!("{}: syntax error", num)),
                     _ => {},
                 }
                 let left_tree = tree.left_mut().unwrap();
@@ -266,7 +266,7 @@ impl Parser {
                     BinaryTree::NonEmpty(_) => {
                         let right_tree = tree.right_mut().unwrap();
                         if right_tree.is_non_empty() {
-                            return Err(format!("{:?}: syntax error", num))
+                            return Err(format!("{}: syntax error", num))
                         }
                         right_tree
                     }
@@ -381,6 +381,30 @@ impl Parser {
         }
     }
 
+    fn is_num(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::NumString(_) => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
+    }
+
+    fn is_string_token(&mut self) -> bool {
+        match self.get_next_token() {
+            Ok(token) => {
+                match token {
+                    Token::String(_) => true,
+                    _ => false,
+                }
+            },
+            Err(_) => false,
+        }
+    }
+
     fn add_operator(&mut self, tree: &mut BinaryTree<Element>, operator: Operator, data_base: &DataBase) -> Result<bool, String> {
         match &tree {
             BinaryTree::Empty => {
@@ -448,7 +472,7 @@ impl Parser {
         if !paren_tree.left().unwrap().is_non_empty() {
             return Err(format!("{}: syntax error", "()"))
         }
-        if self.is_r_paren() {
+        if self.is_next_token(Token::RParen) {
             *paren_tree.right_mut().unwrap() = BinaryTree::from_element(Element::Operator(Operator::RParen));
             self.index_plus();
             if self.is_num() || self.is_string_token() {
@@ -510,7 +534,7 @@ impl Parser {
         };
         *next_tree = BinaryTree::from_element(Element::Func(string_box.clone()));
         self.index_plus();
-        if !self.is_l_paren() {
+        if !self.is_next_token(Token::LParen) {
             return Err(format!("error: {} is defined as a function, so it needs parentheses", string_box))
         }
         let mut paren_tree = next_tree.left_mut().unwrap();
@@ -528,54 +552,6 @@ impl Parser {
             = std::mem::replace(tree,
                     BinaryTree::from_element(Element::Operator(operator)));
         tree.add_left_node_from_tree(tmp_tree);
-    }
-
-    fn is_r_paren(&mut self) -> bool {
-        match self.get_next_token() {
-            Ok(token) => {
-                match token {
-                    Token::RParen => true,
-                    _ => false,
-                }
-            },
-            Err(_) => false,
-        }
-    }
-
-    fn is_l_paren(&mut self) -> bool {
-        match self.get_next_token() {
-            Ok(token) => {
-                match token {
-                    Token::LParen => true,
-                    _ => false,
-                }
-            },
-            Err(_) => false,
-        }
-    }
-
-    fn is_num(&mut self) -> bool {
-        match self.get_next_token() {
-            Ok(token) => {
-                match token {
-                    Token::NumString(_) => true,
-                    _ => false,
-                }
-            },
-            Err(_) => false,
-        }
-    }
-
-    fn is_string_token(&mut self) -> bool {
-        match self.get_next_token() {
-            Ok(token) => {
-                match token {
-                    Token::String(_) => true,
-                    _ => false,
-                }
-            },
-            Err(_) => false,
-        }
     }
 
     pub fn calculation(&self, tree: &mut BinaryTree<Element>, data_base: &DataBase, local_variable: Option<(&String, Option<&Data>)>) -> Result<Option<Num>, String> {
@@ -1364,7 +1340,7 @@ mod tests {
     #[test]
     fn calculation_error_double_num() {
         let code = "2 3".to_string();
-        assert_eq!(calculation_test(code), Err("error parser: Float(3.0): syntax error".to_string()))
+        assert_eq!(calculation_test(code), Err("error parser: 3: syntax error".to_string()))
     }
 
     #[test]
