@@ -12,8 +12,8 @@ fn interpreter(terminal_controller: &mut TerminalController) -> crossterm::Resul
             TerminalEvent::End => break,
             TerminalEvent::String(s) => {
                 let string = format!("{}\n", s);
-                terminal_controller.output_string(&string)?;
                 thread::sleep(Duration::from_secs(2));
+                terminal_controller.output_string(&string)?;
             }
         }
     }
@@ -21,7 +21,7 @@ fn interpreter(terminal_controller: &mut TerminalController) -> crossterm::Resul
 }
 
 fn main() {
-    let mut terminal_controller = TerminalController::new();
+    let mut terminal_controller = TerminalController::new().expect("Interpreter initialization failed");
     match interpreter(&mut terminal_controller) {
         Err(e) => eprintln!("{}", e),
         _ => println!("finish"),

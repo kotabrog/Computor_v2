@@ -59,7 +59,6 @@ impl RowContents {
     fn insert(&mut self, ch: char) {
         self.content.insert(self.index, ch);
         self.index += 1;
-
     }
 
     fn insert_str(&mut self, string: &str) {
@@ -82,9 +81,19 @@ impl RowContents {
         &self.content
     }
 
-    fn move_index(&mut self, is_left: bool) {
-        self.index = (if is_left {self.index.saturating_sub(1)} else {self.index + 1})
-            .min(self.content.len());
+    fn move_index(&mut self, is_left: bool) -> bool {
+        if is_left {
+            if self.index == 0 {
+                return false
+            }
+            self.index -= 1;
+        } else {
+            if self.index == self.content.len() {
+                return false
+            }
+            self.index += 1;
+        }
+        true
     }
 
     fn move_content(&mut self) -> Box<String> {
@@ -137,54 +146,65 @@ impl io::Write for EditorContents {
 struct CursorController {
     cursor_x: usize,
     cursor_y: usize,
-    cursor_row: usize,
 }
 
 impl CursorController {
-    fn new() -> CursorController {
-        Self { cursor_x: 0, cursor_y: 0, cursor_row: 0 }
+    fn new() -> crossterm::Result<Self> {
+        let mut cursor_controller = Self { cursor_x: 0, cursor_y: 0 };
+        cursor_controller.update_position()?;
+        Ok(cursor_controller)
     }
 
-    fn move_cursor(&mut self, direction: KeyCode, window_size: &(usize, usize)) {
+    fn move_cursor(&mut self, direction: KeyCode, window_size: &(usize, usize)) -> i32 {
         match direction {
             KeyCode::Left => {
                 if self.cursor_x == 0 {
                     self.cursor_x = window_size.1 - 1;
-                    self.cursor_y = self.cursor_y.saturating_sub(1);
+                    if self.cursor_y == 0 {
+                        return -1
+                    } else {
+                        self.cursor_y -= 1;
+                    }
                 } else {
-                    self.cursor_x = self.cursor_x.saturating_sub(1);
+                    self.cursor_x -= 1;
                 }
             }
             KeyCode::Right => {
                 if self.cursor_x == window_size.0 - 1 {
                     self.cursor_x = 0;
-                } else {
-                    self.cursor_x += 1;
                     if self.cursor_y != window_size.1 - 1 {
                         self.cursor_y += 1;
+                    } else {
+                        return 1
                     }
+                } else {
+                    self.cursor_x += 1;
                 }
             }
             _ => unimplemented!(),
         }
+        0
     }
 
-    fn update_from_content_index(&mut self, index: usize, window_size: &(usize, usize)) {
-        let index = index + 2;
-        self.cursor_x = index % window_size.0;
-        self.cursor_y = self.cursor_row + (index / window_size.0);
-        self.cursor_y = self.cursor_y.min(window_size.1 - 1);
+    fn update_position(&mut self) -> crossterm::Result<()> {
+        let pos = cursor::position()?;
+        self.cursor_x = pos.0 as usize;
+        self.cursor_y = pos.1 as usize;
+        Ok(())
     }
 
-    fn update_cursor_row(&mut self, row: usize) {
-        self.cursor_row = row;
+    fn update_from_value(&mut self, value: usize, window_size: &(usize, usize)) {
+        self.cursor_x = self.cursor_x + value;
+        self.cursor_y = (self.cursor_y + ((self.cursor_x - 1) / window_size.0))
+            .min(window_size.1 - 1);
+        self.cursor_x = self.cursor_x % window_size.0;
     }
 
-    fn get_refresh_cursor_row(&mut self, content_len: usize, window_size: &(usize, usize)) -> (usize, usize) {
-        let size = content_len + 2;
-        let y_length = size / window_size.0 + 1;
-        let new_cursor_row = self.cursor_row.min(window_size.1.saturating_sub(y_length));
-        (new_cursor_row, self.cursor_row - new_cursor_row)
+    fn get_position(&self) -> cursor::MoveTo {
+        cursor::MoveTo(
+            self.cursor_x as u16,
+            self.cursor_y as u16
+        )
     }
 }
 
@@ -197,73 +217,85 @@ struct Output {
 }
 
 impl Output {
-    fn new() -> Self {
+    fn new() -> crossterm::Result<Self> {
         let win_size = terminal::size()
             .map(|(x, y)| (x as usize, y as usize))
             .unwrap();
-        Self {
+        Ok(Self {
             win_size,
             row_contents: RowContents::new(),
             editor_contents: EditorContents::new(),
-            cursor_controller: CursorController::new(),
-        }
+            cursor_controller: CursorController::new()?,
+        })
     }
 
     fn clear_screen() -> crossterm::Result<()> {
         execute!(stdout(), terminal::Clear(ClearType::All))?;
-        execute!(stdout(), cursor::MoveTo(0, 0))
+        execute!(stdout(), cursor::MoveTo(0, 0))?;
+        print!("> ");
+        stdout().flush()?;
+        Ok(())
     }
 
-    fn refresh_row(&mut self, new_cursor_row: usize) {
-        self.editor_contents.push_str("> ");
-        self.editor_contents.push_str(self.row_contents.get_content());
-        self.cursor_controller.update_cursor_row(new_cursor_row);
-        self.cursor_controller.update_from_content_index(
-            self.row_contents.get_index(),
-            &self.win_size
-        );
-    }
-
-    fn refresh_screen(&mut self) -> crossterm::Result<()> {
-        let (new_cursor_row, diff) = self.cursor_controller.get_refresh_cursor_row(
-            self.row_contents.get_content().len(),
-            &self.win_size
-        );
-        if diff > 0 {
+    fn move_cursor(&mut self, direction: KeyCode) -> crossterm::Result<()> {
+        let move_flag = self.row_contents.move_index(direction == KeyCode::Left);
+        if move_flag {
+            queue!(self.editor_contents, cursor::Hide)?;
+            let move_count = self.cursor_controller.move_cursor(direction, &self.win_size);
+            match move_count {
+                1 => queue!(self.editor_contents, terminal::ScrollUp(1))?,
+                -1 => queue!(self.editor_contents, terminal::ScrollDown(1))?,
+                _ => {},
+            }
             queue!(
                 self.editor_contents,
-                terminal::ScrollDown(diff as u16),
+                self.cursor_controller.get_position(),
+                cursor::Show,
             )?;
+            self.editor_contents.flush()?;
         }
-        queue!(
-            self.editor_contents,
-            cursor::Hide,
-            cursor::MoveTo(0, new_cursor_row as u16),
-            terminal::Clear(ClearType::FromCursorDown),
-        )?;
-        self.refresh_row(new_cursor_row);
-        let cursor_x = self.cursor_controller.cursor_x;
-        let cursor_y = self.cursor_controller.cursor_y;
-        queue!(
-            self.editor_contents,
-            cursor::MoveTo(cursor_x as u16, cursor_y as u16),
-            cursor::Show
-        )?;
-        self.editor_contents.flush()
+        Ok(())
     }
 
-    fn move_cursor(&mut self, direction: KeyCode) {
-        self.row_contents.move_index(direction == KeyCode::Left);
-        // self.cursor_controller.move_cursor(direction, &self.win_size);
-    }
+    fn insert_char(&mut self, c: char) -> crossterm::Result<()> {
+        queue!(self.editor_contents, cursor::Hide)?;
 
-    fn insert_char(&mut self, c: char) {
-        self.row_contents.insert(c)
+        // Check if scrolldown is required
+        let index = self.row_contents.get_index();
+        let content_length = self.row_contents.get_content().len();
+        let diff = content_length - index;
+        let x = self.cursor_controller.cursor_x + diff;
+        let y = self.cursor_controller.cursor_y + ((x + 1) / self.win_size.0);
+        if y >= self.win_size.1 {
+            let value = y - self.win_size.1 + 1;
+            queue!(self.editor_contents, terminal::ScrollUp(value as u16))?;
+            self.cursor_controller.cursor_y = self.cursor_controller.cursor_y.saturating_sub(value);
+        }
+
+        self.cursor_controller.move_cursor(KeyCode::Right, &self.win_size);
+
+        queue!(self.editor_contents, terminal::Clear(ClearType::FromCursorDown))?;
+
+        self.row_contents.insert(c);
+        let index = self.row_contents.get_index() - 1;
+        for (i, c) in self.row_contents.get_content().chars().enumerate() {
+            if i >= index {
+                self.editor_contents.push(c);
+            }
+        }
+
+        queue!(
+            self.editor_contents,
+            self.cursor_controller.get_position(),
+            cursor::Show,
+        )?;
+        self.editor_contents.flush()?;
+        Ok(())
     }
 
     fn enter(&mut self) -> crossterm::Result<Box<String>> {
-        self.cursor_controller.update_from_content_index(
-            self.row_contents.get_content().len(),
+        self.cursor_controller.update_from_value(
+            self.row_contents.get_content().len() - self.row_contents.get_index(),
             &self.win_size
         );
         queue!(
@@ -274,21 +306,59 @@ impl Output {
                 self.cursor_controller.cursor_y as u16
             ),
             terminal::Clear(ClearType::FromCursorDown),
-            cursor::Show,
         )?;
         self.editor_contents.push_str("\r\n");
+        queue!(self.editor_contents, cursor::Show)?;
+        self.editor_contents.flush()?;
+        self.cursor_controller.update_position()?;
         Ok(self.row_contents.move_content())
     }
 
-    fn backspace(&mut self) {
+    fn backspace(&mut self) -> crossterm::Result<()> {
+        // self.move_cursor(KeyCode::Left)?;
+        let index = self.row_contents.get_index();
+        if index == 0 {
+            return Ok(())
+        }
         self.row_contents.remove();
+        queue!(self.editor_contents, cursor::Hide)?;
+        let move_count = self.cursor_controller.move_cursor(KeyCode::Left, &self.win_size);
+        match move_count {
+            -1 => queue!(self.editor_contents, terminal::ScrollUp(1))?,
+            _ => {},
+        }
+        queue!(
+            self.editor_contents,
+            self.cursor_controller.get_position(),
+            terminal::Clear(ClearType::FromCursorDown),
+        )?;
+        let index = self.row_contents.get_index();
+        for (i, c) in self.row_contents.get_content().chars().enumerate() {
+            if i >= index {
+                self.editor_contents.push(c);
+            }
+        }
+        queue!(
+            self.editor_contents,
+            self.cursor_controller.get_position(),
+            cursor::Show,
+        )?;
+        self.editor_contents.flush()?;
+        Ok(())
     }
 
-    fn output_string(&mut self, string: &str) -> crossterm::Result<()>{
+    fn output_string(&mut self, string: &str) -> crossterm::Result<()> {
+        queue!(
+            self.editor_contents,
+            cursor::Hide,
+            self.cursor_controller.get_position(),
+        )?;
         self.editor_contents.push_str(string);
+        self.editor_contents.push('\r');
+        self.editor_contents.push_str("> ");
+        queue!(self.editor_contents, cursor::Show)?;
         self.editor_contents.flush()?;
-        let pos = cursor::position()?;
-        self.cursor_controller.update_cursor_row(pos.1 as usize);
+        self.cursor_controller.update_position()?;
         Ok(())
     }
 }
@@ -300,12 +370,12 @@ pub struct TerminalController {
 }
 
 impl TerminalController {
-    pub fn new() -> Self {
+    pub fn new() -> crossterm::Result<Self> {
         Output::clear_screen().expect("Could not clear screen");
-        TerminalController {
+        Ok(TerminalController {
             reader: Reader::new(),
-            output: Output::new()
-        }
+            output: Output::new()?,
+        })
     }
 
     fn process_keypress(&mut self, event: KeyEvent) -> crossterm::Result<TerminalEvent> {
@@ -323,13 +393,13 @@ impl TerminalController {
                 modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
-            } => self.output.move_cursor(direction),
+            } => self.output.move_cursor(direction)?,
             KeyEvent {
                 code: KeyCode::Char(c),
                 modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
-            } => self.output.insert_char(c),
+            } => self.output.insert_char(c)?,
             KeyEvent {
                 code: KeyCode::Enter,
                 modifiers: KeyModifiers::NONE,
@@ -341,7 +411,7 @@ impl TerminalController {
                 modifiers: KeyModifiers::NONE,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
-            } => self.output.backspace(),
+            } => self.output.backspace()?,
             _ => {/* wip */}
         }
         Ok(TerminalEvent::Continue)
@@ -349,7 +419,6 @@ impl TerminalController {
 
     pub fn run(&mut self) -> crossterm::Result<TerminalEvent> {
         let _cleanup = CleanUp::new();
-        self.output.refresh_screen()?;
         let ret = match self.reader.read()? {
             Event::Key(event) => self.process_keypress(event),
             _ => todo!("wip key"),
