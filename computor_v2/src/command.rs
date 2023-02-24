@@ -29,4 +29,11 @@ impl Commands {
         }
         string
     }
+
+    pub fn at(&self, index: usize) -> Option<String> {
+        match self.data.get(index) {
+            Some(b) => Some(b.0.clone()),
+            None => None,
+        }
+    }
 }

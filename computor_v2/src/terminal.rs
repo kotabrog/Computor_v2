@@ -24,6 +24,8 @@ pub enum TerminalEvent {
     String(Box<String>),
     Continue,
     End,
+    Up(Box<String>),
+    Down(Box<String>),
 }
 
 
@@ -200,6 +202,18 @@ impl CursorController {
         self.cursor_x = self.cursor_x % window_size.0;
     }
 
+    fn update_from_minus_value(&mut self, value: usize, window_size: &(usize, usize)) {
+        let mut x = self.cursor_x as i64 - value as i64;
+        if x < 0 {
+            let mut y = 0;
+            y = (x.abs() - 1) / window_size.0 as i64 + 1;
+            self.cursor_x = (x + y * window_size.0 as i64) as usize;
+            self.cursor_y = self.cursor_y.saturating_sub(y as usize);
+        } else {
+            self.cursor_x = x as usize;
+        }
+    }
+
     fn get_position(&self) -> cursor::MoveTo {
         cursor::MoveTo(
             self.cursor_x as u16,
@@ -359,9 +373,43 @@ impl Output {
             cursor::Hide,
             self.cursor_controller.get_position(),
         )?;
+        self.editor_contents.flush()?;
+
+        terminal::disable_raw_mode().expect("Could not disable raw mode");
         self.editor_contents.push_str(string);
+        self.editor_contents.flush()?;
+        terminal::enable_raw_mode().expect("Could not activate raw mode");
+
         self.editor_contents.push('\r');
         self.editor_contents.push_str("> ");
+        queue!(self.editor_contents, cursor::Show)?;
+        self.editor_contents.flush()?;
+        self.cursor_controller.update_position()?;
+        Ok(())
+    }
+
+    fn up_and_down(&mut self, is_up: bool) -> TerminalEvent {
+        self.cursor_controller.update_from_minus_value(
+            self.row_contents.get_index(),
+            &self.win_size
+        );
+        let string = self.row_contents.move_content();
+        if is_up {
+            TerminalEvent::Up(string)
+        } else {
+            TerminalEvent::Down(string)
+        }
+    }
+
+    fn change_content(&mut self, string: &str) -> crossterm::Result<()> {
+        queue!(
+            self.editor_contents,
+            cursor::Hide,
+            self.cursor_controller.get_position(),
+            terminal::Clear(ClearType::FromCursorDown),
+        )?;
+        self.row_contents.insert_str(string);
+        self.editor_contents.push_str(string);
         queue!(self.editor_contents, cursor::Show)?;
         self.editor_contents.flush()?;
         self.cursor_controller.update_position()?;
@@ -387,7 +435,7 @@ impl TerminalController {
     fn process_keypress(&mut self, event: KeyEvent) -> crossterm::Result<TerminalEvent> {
         match event {
             KeyEvent {
-                code: KeyCode::Char('q' | 'c'),
+                code: KeyCode::Char('q' | 'c' | 'd'),
                 modifiers: KeyModifiers::CONTROL,
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
@@ -400,6 +448,14 @@ impl TerminalController {
                 kind: KeyEventKind::Press,
                 state: KeyEventState::NONE,
             } => self.output.move_cursor(direction)?,
+            KeyEvent {
+                code: direction @
+                    (KeyCode::Up
+                    | KeyCode::Down),
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                state: KeyEventState::NONE,
+            } => return Ok(self.output.up_and_down(direction == KeyCode::Up)),
             KeyEvent {
                 code: KeyCode::Char(c),
                 modifiers: KeyModifiers::NONE,
@@ -435,5 +491,10 @@ impl TerminalController {
     pub fn output_string(&mut self, string: &str) -> crossterm::Result<()> {
         let _cleanup = CleanUp::new();
         self.output.output_string(string)
+    }
+
+    pub fn change_content(&mut self, string: &str) -> crossterm::Result<()> {
+        let _cleanup = CleanUp::new();
+        self.output.change_content(string)
     }
 }
