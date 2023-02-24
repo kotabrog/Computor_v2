@@ -203,10 +203,9 @@ impl CursorController {
     }
 
     fn update_from_minus_value(&mut self, value: usize, window_size: &(usize, usize)) {
-        let mut x = self.cursor_x as i64 - value as i64;
+        let x = self.cursor_x as i64 - value as i64;
         if x < 0 {
-            let mut y = 0;
-            y = (x.abs() - 1) / window_size.0 as i64 + 1;
+            let y = (x.abs() - 1) / window_size.0 as i64 + 1;
             self.cursor_x = (x + y * window_size.0 as i64) as usize;
             self.cursor_y = self.cursor_y.saturating_sub(y as usize);
         } else {

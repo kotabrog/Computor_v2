@@ -31,9 +31,13 @@ impl Commands {
     }
 
     pub fn at(&self, index: usize) -> Option<String> {
-        match self.data.get(index) {
-            Some(b) => Some(b.0.clone()),
-            None => None,
+        if self.data.len() <= index {
+            None
+        } else {
+            match self.data.get(self.data.len() - index - 1) {
+                Some(b) => Some(b.0.clone()),
+                None => None,
+            }
         }
     }
 }

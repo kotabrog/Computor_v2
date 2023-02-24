@@ -178,117 +178,73 @@ fn interpreter() {
 }
 
 
+fn interpreter_rich_loop(terminal_controller: &mut TerminalController, data_base: &mut DataBase, commands: &mut Commands) -> crossterm::Result<()> {
+    let mut command_index: i64 = -1;
+    let mut temp_command = String::new();
+    loop {
+        match terminal_controller.run()? {
+            TerminalEvent::Continue => {},
+            TerminalEvent::End => {
+                println!("exit");
+                break;
+            },
+            TerminalEvent::String(code) => {
+                command_index = -1;
+                temp_command = String::new();
+                if *code == "exit" {
+                    println!("exit");
+                    break;
+                }
+                let (result, output) = match compute(&code, data_base, &commands) {
+                    Err(e) => {
+                        (e.clone(), format!("  {}\n", e))
+                    },
+                    Ok((result, output)) => (result, output)
+                };
+                terminal_controller.output_string(&output)?;
+                commands.push(*code, result);
+            },
+            TerminalEvent::Up(s) => {
+                if command_index == -1 {
+                    temp_command = *s.clone();
+                }
+                match commands.at((command_index + 1) as usize) {
+                    Some(new_s) => {
+                        command_index += 1;
+                        terminal_controller.change_content(&new_s)?;
+                    },
+                    None => terminal_controller.change_content(&s)?,
+                }
+            }
+            TerminalEvent::Down(s) => {
+                if command_index == -1 {
+                    terminal_controller.change_content(&s)?;
+                } else if command_index == 0 {
+                    terminal_controller.change_content(&temp_command)?;
+                    command_index = -1;
+                } else {
+                    match commands.at((command_index - 1) as usize) {
+                        Some(new_s) => {
+                            command_index -= 1;
+                            terminal_controller.change_content(&new_s)?;
+                        },
+                        None => terminal_controller.change_content(&s)?,
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+
 fn interpreter_rich() {
     let mut terminal_controller = TerminalController::new().expect("Interpreter initialization failed");
     let mut data_base = DataBase::new();
     let mut commands = Commands::new();
-    let mut command_index: i64 = -1;
-    let mut temp_command = String::new();
-    loop {
-        match terminal_controller.run() {
-            Ok(event) => match event {
-                TerminalEvent::Continue => {},
-                TerminalEvent::End => {
-                    println!("exit");
-                    break;
-                },
-                TerminalEvent::String(code) => {
-                    command_index = -1;
-                    temp_command = String::new();
-                    if *code == "exit" {
-                        println!("exit");
-                        break;
-                    }
-                    let (result, output) = match compute(&code, &mut data_base, &commands) {
-                        Err(e) => {
-                            (e.clone(), format!("  {}\n", e))
-                        },
-                        Ok((result, output)) => (result, output)
-                    };
-                    match terminal_controller.output_string(&output) {
-                        Ok(_) => {},
-                        Err(e) => {
-                            println!("{}", e);
-                            break
-                        }
-                    }
-                    commands.push(*code, result);
-                },
-                TerminalEvent::Up(s) => {
-                    if command_index == -1 {
-                        temp_command = *s.clone();
-                    }
-                    match commands.at((command_index + 1) as usize) {
-                        Some(new_s) => {
-                            command_index += 1;
-                            match terminal_controller.change_content(&new_s) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("{}", e);
-                                    break
-                                }
-                            };
-                        },
-                        None => {
-                            match terminal_controller.change_content(&s) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("{}", e);
-                                    break
-                                }
-                            };
-                        }
-                    }
-                }
-                TerminalEvent::Down(s) => {
-                    if command_index == -1 {
-                        match terminal_controller.change_content(&s) {
-                            Ok(_) => continue,
-                            Err(e) => {
-                                println!("{}", e);
-                                break
-                            }
-                        };
-                    } else if command_index == 0 {
-                        match terminal_controller.change_content(&temp_command) {
-                            Ok(_) => {
-                                command_index = -1;
-                                continue;
-                            },
-                            Err(e) => {
-                                println!("{}", e);
-                                break
-                            }
-                        };
-                    }
-                    match commands.at((command_index - 1) as usize) {
-                        Some(new_s) => {
-                            command_index -= 1;
-                            match terminal_controller.change_content(&new_s) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("{}", e);
-                                    break
-                                }
-                            };
-                        },
-                        None => {
-                            match terminal_controller.change_content(&s) {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    println!("{}", e);
-                                    break
-                                }
-                            };
-                        }
-                    }
-                }
-            },
-            Err(e) => {
-                println!("{}", e);
-                break
-            },
-        }
+    match interpreter_rich_loop(&mut terminal_controller, &mut data_base, &mut commands) {
+        Ok(()) => {},
+        Err(e) => println!("{}", e),
     }
 }
 
