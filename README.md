@@ -152,9 +152,9 @@ g(x): x - 1
 ```
 
 - operator
-    - +
-    - -
-    - *
+    - \+
+    - \-
+    - \*
     - /
     - %
     - ** (matrix product)
@@ -164,6 +164,16 @@ g(x): x - 1
     - Special characters such as i cannot be registered
     - Alphabet only
     - uppercase letters are recognized as lowercase
+
+- Rich terminal mode
+  - Left and right cursor movement
+  - Up/Down keys to search for previous commands
+  - Ctrl + C, D, Q to exit the terminal
+  - The following commands can be used for rich mode
+
+```
+./computorv2 --rich
+```
 
 ## Author
 
